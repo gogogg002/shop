@@ -1,5 +1,5 @@
 {
-  "name": "vault-shop",
+  "name": "krynel-shop",
   "private": true,
   "scripts": {
     "dev:server": "pnpm --filter server dev",
@@ -7,5 +7,6 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
-  }
+  },
+  "packageManager": "pnpm@10.34.9"
 }

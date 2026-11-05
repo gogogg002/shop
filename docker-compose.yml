@@ -3,9 +3,9 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: vault
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vault}
-      POSTGRES_DB: vault
+      POSTGRES_USER: krynel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-krynel}
+      POSTGRES_DB: krynel
     volumes:
       - pgdata:/var/lib/postgresql/data
   app:
@@ -15,5 +15,20 @@ services:
     depends_on: [db]
     ports:
       - "127.0.0.1:3000:3000"
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

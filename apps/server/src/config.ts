@@ -1,6 +1,12 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+// z.coerce.boolean() превращает строку "false" в true, поэтому парсим явно
+const flag = z
+  .string()
+  .default('false')
+  .transform((v) => ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase()));
+
 const schema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().default(3000),
@@ -12,11 +18,11 @@ const schema = z.object({
   PUBLIC_URL: z.string().default('http://localhost:3000'),
   CRYPTOBOT_TOKEN: z.string().default(''),
   /** true — тестовая сеть CryptoBot (testnet-pay.crypt.bot) */
-  CRYPTOBOT_TESTNET: z.coerce.boolean().default(false),
+  CRYPTOBOT_TESTNET: flag,
   XROCKET_TOKEN: z.string().default(''),
   LOLZ_TOKEN: z.string().default(''),
   /** В dev-режиме разрешает заголовок x-dev-user вместо initData */
-  DEV_AUTH: z.coerce.boolean().default(false),
+  DEV_AUTH: flag,
 });
 
 export const config = schema.parse(process.env);
