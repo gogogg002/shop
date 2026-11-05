@@ -1,5 +1,5 @@
 {
-  "name": "vault-shop",
+  "name": "krynel-shop",
   "private": true,
   "scripts": {
     "dev:server": "pnpm --filter server dev",
