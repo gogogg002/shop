@@ -7,5 +7,6 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
-  }
+  },
+  "packageManager": "pnpm@10.34.9"
 }
