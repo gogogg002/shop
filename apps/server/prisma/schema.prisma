@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Суммы везде хранятся в копейках (RUB), если не сказано иначе.
+
+model User {
+  id         Int       @id @default(autoincrement())
+  tgId       BigInt    @unique
+  username   String?
+  firstName  String?
+  balance    Int       @default(0)
+  isBlocked  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  orders     Order[]
+  messages   Message[]
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  slug      String    @unique
+  title     String
+  sort      Int       @default(0)
+  products  Product[]
+}
+
+enum DeliveryType {
+  MANUAL // админ выдаёт руками (Premium подарком, подписки на аккаунт)
+  CODES  // код из загруженного склада выдаётся автоматически
+}
+
+enum Glass {
+  RED
+  WHITE
+  DARK
+}
+
+model Product {
+  id           Int          @id @default(autoincrement())
+  categoryId   Int
+  category     Category     @relation(fields: [categoryId], references: [id])
+  title        String
+  subtitle     String       @default("")
+  description  String       @default("")
+  icon         String       @default("star") // имя глифа в мини-аппе
+  glass        Glass        @default(RED)
+  deliveryType DeliveryType @default(MANUAL)
+  needsRecipient Boolean    @default(true) // нужен ли @username получателя
+  isActive     Boolean      @default(true)
+  isHit        Boolean      @default(false)
+  sort         Int          @default(0)
+  createdAt    DateTime     @default(now())
+  variants     Variant[]
+}
+
+model Variant {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title      String   // «12 мес», «500 Stars»
+  price      Int      // цена продажи
+  oldPrice   Int?     // зачёркнутая цена
+  cost       Int      @default(0) // закупка, для маржи
+  isActive   Boolean  @default(true)
+  sort       Int      @default(0)
+  codes      Code[]
+  orders     Order[]
+}
+
+model Code {
+  id         Int      @id @default(autoincrement())
+  variantId  Int
+  variant    Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  value      String
+  orderId    Int?     @unique
+  order      Order?   @relation(fields: [orderId], references: [id])
+  createdAt  DateTime @default(now())
+  usedAt     DateTime?
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT       // ждём оплату
+  AWAITING_CONFIRMATION // ручная оплата: клиент прислал чек, ждём админа
+  PAID                  // оплачено, в очереди выдачи
+  DELIVERED
+  REJECTED              // админ отклонил ручную оплату
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CRYPTOBOT
+  XROCKET
+  LOLZ
+  SBP
+  UAH
+  BALANCE
+}
+
+model Order {
+  id          Int           @id @default(autoincrement())
+  userId      Int
+  user        User          @relation(fields: [userId], references: [id])
+  variantId   Int
+  variant     Variant       @relation(fields: [variantId], references: [id])
+  recipient   String?
+  status      OrderStatus   @default(PENDING_PAYMENT)
+  method      PaymentMethod
+  amount      Int           // итог к оплате в копейках RUB
+  cost        Int           @default(0) // закупка на момент заказа
+  promoCode   String?
+  discount    Int           @default(0)
+  payAmount   String?       // сумма в валюте оплаты строкой («1250.00 UAH», «36.12 USDT»)
+  externalId  String?       // id инвойса у провайдера
+  payUrl      String?
+  proofFileId String?       // file_id скриншота оплаты в Telegram
+  deliveredText String?     // что выдали клиенту (код, комментарий)
+  createdAt   DateTime      @default(now())
+  paidAt      DateTime?
+  deliveredAt DateTime?
+  code        Code?
+  messages    Message[]
+
+  @@index([status])
+  @@index([userId])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  fromAdmin Boolean  @default(false)
+  text      String
+  fileId    String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model PromoCode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  amount    Int      @default(0) // фиксированная скидка
+  percent   Int      @default(0)
+  usesLeft  Int?
+  expiresAt DateTime?
+}
+
+/// Настройки магазина ключ-значение (карта для UAH, курсы, комиссии, включённые методы).
+model Setting {
+  key   String @id
+  value Json
+}
