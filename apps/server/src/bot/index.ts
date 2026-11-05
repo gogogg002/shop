@@ -30,7 +30,7 @@ export function startBot() {
   };
 
   bot.command('start', (ctx) =>
-    ctx.reply('Подписки, Stars и пополнения за пару минут. Открывайте магазин кнопкой ниже.', {
+    ctx.reply('Krynel: подписки, Stars и пополнения за пару минут. Открывайте магазин кнопкой ниже.', {
       reply_markup: new InlineKeyboard().webApp('Открыть магазин', config.PUBLIC_URL),
     }));
 
