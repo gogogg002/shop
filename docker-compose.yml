@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vault
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vault}
+      POSTGRES_DB: vault
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    depends_on: [db]
+    ports:
+      - "127.0.0.1:3000:3000"
+volumes:
+  pgdata:

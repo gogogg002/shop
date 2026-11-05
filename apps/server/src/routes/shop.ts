@@ -82,7 +82,7 @@ export async function shopRoutes(app: FastifyInstance) {
   app.post('/api/orders/quote', async (req) => {
     const b = quoteBody.parse(req.body);
     const s = await getSettings();
-    const v = await prisma.variant.findUnique({ where: { id: b.variantId } });
+    const v = await prisma.variant.findUnique({ where: { id: b.variantId }, include: { product: true } });
     if (!v) throw new ShopError('not_found', 'Товар не найден', 404);
     let promo = null;
     if (b.promoCode) {
@@ -90,7 +90,10 @@ export async function shopRoutes(app: FastifyInstance) {
       if (!promo || (promo.expiresAt && promo.expiresAt < new Date()) || promo.usesLeft === 0)
         throw new ShopError('bad_promo', 'Промокод не найден или истёк');
     }
-    return { price: v.price, ...computeTotal(v.price, s.fees[b.method] ?? 0, promo) };
+    return {
+      price: v.price, title: v.product.title, variant: v.title, icon: v.product.icon, glass: v.product.glass,
+      ...computeTotal(v.price, s.fees[b.method] ?? 0, promo),
+    };
   });
 
   const createBody = z.object({
