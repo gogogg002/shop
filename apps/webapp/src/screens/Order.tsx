@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, copy, methodLabel, openPay, rub, statusLabel, type OrderView } from '../api';
-import { Icon, Key, useLoad, useToast } from '../ui/kit';
+import { Icon, Key, Stars, useLoad, useToast } from '../ui/kit';
+import { go } from '../App';
 import { Chat } from '../ui/Chat';
 
 export function Order({ id }: { id: number }) {
@@ -70,6 +71,22 @@ export function Order({ id }: { id: number }) {
             <button className="btn icon sm" onClick={() => copyText(o.deliveredText!)} aria-label="Копировать"><Icon name="copy" size={18} /></button>
           </div>
         </div>
+      )}
+
+      {o.canReview && !o.review && (
+        <div className="card pad col" style={{ gap: 10, alignItems: 'center', textAlign: 'center' }}>
+          <div style={{ fontWeight: 700, fontSize: 17 }}>Как вам заказ?</div>
+          <Stars value={0} size={34} label="Оцените заказ" onChange={(r) => go(`/orders/${o.id}/review?r=${r}`)} />
+          <div className="muted small">Отзыв помогает другим покупателям</div>
+        </div>
+      )}
+
+      {o.review && (
+        <a href={`#/orders/${o.id}/review`} className="card pad col" style={{ gap: 6 }}>
+          <div className="between"><span className="cap">Ваш отзыв</span><span className="small" style={{ color: 'var(--a2)', fontWeight: 600 }}>Изменить</span></div>
+          <Stars value={o.review.rating} size={18} />
+          {o.review.text && <p style={{ lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{o.review.text}</p>}
+        </a>
       )}
 
       {o.status === 'PENDING_PAYMENT' && o.payUrl && (

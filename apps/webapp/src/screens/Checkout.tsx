@@ -53,7 +53,7 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
             <Key icon={quote.icon} glass={quote.glass} size={50} />
             <div className="sp">
               <div style={{ fontWeight: 600, fontSize: 16 }}>{quote.title}</div>
-              <div className="muted small">{quote.variant}{recipient ? ` → ${recipient.startsWith('@') ? recipient : '@' + recipient}` : ''}</div>
+              <div className="muted small">{quote.variant}{recipient ? ` → ${/^[@+\d]/.test(recipient) ? recipient : '@' + recipient}` : ''}</div>
             </div>
           </div>
           <div style={{ borderTop: '2px dashed rgba(255,255,255,.1)', margin: '4px 0' }} />

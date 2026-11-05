@@ -45,10 +45,12 @@ export function Orders() {
           {rest.map((o) => {
             const st = statusLabel[o.status];
             return (
-              <a key={o.id} href={`#/orders/${o.id}`} className="row item">
+              <a key={o.id} href={o.status === 'DELIVERED' && !o.reviewed ? `#/orders/${o.id}/review` : `#/orders/${o.id}`} className="row item">
                 <Key icon={o.icon} glass={o.glass} size={40} />
                 <div className="sp"><div style={{ fontWeight: 600 }} className="ellipsis">{o.product} · {o.variant}</div><div className="muted small">{fmt(o.createdAt)}</div></div>
-                <span className={`pill ${st.tone}`}>{st.text}</span>
+                {o.status === 'DELIVERED' && !o.reviewed
+                  ? <span className="pill a">★ Оценить</span>
+                  : <span className={`pill ${st.tone}`}>{st.text}</span>}
               </a>
             );
           })}

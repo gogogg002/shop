@@ -19,7 +19,11 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ShopError) return reply.code(err.status).send({ error: err.code, message: err.message });
-    if (err instanceof ZodError) return reply.code(400).send({ error: 'validation', message: 'Проверьте поля', issues: err.issues });
+    if (err instanceof ZodError) {
+      // Свои русские сообщения из схем показываем как есть, стандартные английские — общим текстом
+      const own = err.issues.find((i) => /[а-яё]/i.test(i.message))?.message;
+      return reply.code(400).send({ error: 'validation', message: own ?? 'Проверьте поля', issues: err.issues });
+    }
     req.log.error(err);
     return reply.code(500).send({ error: 'internal', message: 'Что-то сломалось, попробуйте ещё раз' });
   });

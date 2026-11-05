@@ -7,8 +7,16 @@ import { autoProviders, isManual } from '../payments/index.js';
 import {
   ShopError, addMessage, cancelByUser, computeTotal, createOrder, manualInstructions, submitProof,
 } from '../services/orders.js';
+import { REVIEW_TEXT_MAX, listReviews, productGroup, ratingSummary, submitReview, titleKey } from '../services/reviews.js';
+import type { AccessMode } from '@prisma/client';
 
 const METHODS = ['CRYPTOBOT', 'XROCKET', 'LOLZ', 'SBP', 'UAH'] as const;
+
+/** Вкладки одного товара: сначала «Без входа», потом «Со входом» */
+const ACCESS_ORDER: Record<AccessMode, number> = { NO_LOGIN: 0, WITH_LOGIN: 1, UNSPECIFIED: 2 };
+const ACCESS_LABEL: Record<AccessMode, string> = { NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом', UNSPECIFIED: '' };
+const groupKey = (p: { id: number; title: string; access: AccessMode }) =>
+  p.access === 'UNSPECIFIED' ? `id:${p.id}` : `t:${titleKey(p.title)}`;
 
 /** Какие методы реально можно выбрать: включены в админке и настроены */
 async function availableMethods() {
@@ -40,21 +48,34 @@ export async function shopRoutes(app: FastifyInstance) {
       include: {
         products: {
           where: { isActive: true },
-          orderBy: { sort: 'asc' },
+          orderBy: [{ sort: 'asc' }, { id: 'asc' }],
           include: { variants: { where: { isActive: true }, orderBy: { sort: 'asc' } } },
         },
       },
     });
     return categories
-      .map((c) => ({
-        ...c,
-        products: c.products
-          .filter((p) => p.variants.length)
-          .map((p) => ({
-            id: p.id, title: p.title, subtitle: p.subtitle, icon: p.icon, glass: p.glass, isHit: p.isHit,
-            minPrice: Math.min(...p.variants.map((v) => v.price)),
-          })),
-      }))
+      .map((c) => {
+        // Товары с одинаковым названием и разным режимом входа — одна карточка с вкладками
+        const groups = new Map<string, typeof c.products>();
+        for (const p of c.products.filter((x) => x.variants.length)) {
+          const k = groupKey(p);
+          groups.set(k, [...(groups.get(k) ?? []), p]);
+        }
+        const products = [...groups.values()].map((g) => {
+          const sorted = [...g].sort((a, b) => ACCESS_ORDER[a.access] - ACCESS_ORDER[b.access]);
+          const first = sorted[0];
+          const modes = sorted.map((p) => p.access).filter((a) => a !== 'UNSPECIFIED');
+          return {
+            id: first.id, title: first.title, icon: first.icon, glass: first.glass,
+            subtitle: modes.length > 1 ? modes.map((m) => ACCESS_LABEL[m]).join(' · ') : first.subtitle,
+            isHit: g.some((p) => p.isHit),
+            access: first.access,
+            modes,
+            minPrice: Math.min(...g.flatMap((p) => p.variants.map((v) => v.price))),
+          };
+        });
+        return { id: c.id, slug: c.slug, title: c.title, sort: c.sort, products };
+      })
       .filter((c) => c.products.length);
   });
 
@@ -69,12 +90,50 @@ export async function shopRoutes(app: FastifyInstance) {
       ? Object.fromEntries(await Promise.all(p.variants.map(async (v) =>
           [v.id, await prisma.code.count({ where: { variantId: v.id, orderId: null } })] as const)))
       : null;
+
+    const groupIds = await productGroup(p);
+    const siblings = groupIds.length > 1
+      ? (await prisma.product.findMany({
+          where: { id: { in: groupIds }, isActive: true, variants: { some: { isActive: true } } },
+          select: { id: true, access: true },
+        }))
+          .sort((a, b) => ACCESS_ORDER[a.access] - ACCESS_ORDER[b.access])
+          .map((x) => ({ id: x.id, access: x.access, label: ACCESS_LABEL[x.access] }))
+      : [];
+    const s = await getSettings();
+
     return {
       id: p.id, title: p.title, subtitle: p.subtitle, description: p.description, icon: p.icon, glass: p.glass,
-      category: p.category.title, needsRecipient: p.needsRecipient, deliveryType: p.deliveryType,
+      category: p.category.title, needsRecipient: p.needsRecipient, recipientKind: p.recipientKind,
+      deliveryType: p.deliveryType, access: p.access,
+      wholesale: p.wholesale && Boolean(s.supportUsername),
+      siblings: siblings.length > 1 ? siblings : [],
       variants: p.variants.map((v) => ({
         id: v.id, title: v.title, price: v.price, oldPrice: v.oldPrice, inStock: stock ? (stock[v.id] ?? 0) > 0 : true,
       })),
+      rating: await ratingSummary({ productId: { in: groupIds } }),
+      reviews: await listReviews({ productIds: groupIds, limit: 3 }),
+    };
+  });
+
+  /** Отзывы на витрине: все или по товару (вместе с его вкладками «Без входа / Со входом») */
+  app.get('/api/reviews', async (req) => {
+    const q = z.object({
+      productId: z.coerce.number().int().positive().optional(),
+      limit: z.coerce.number().int().min(0).max(50).default(20),
+      before: z.coerce.number().int().positive().optional(),
+    }).parse(req.query);
+    let productIds: number[] | undefined;
+    if (q.productId) {
+      const p = await prisma.product.findUnique({ where: { id: q.productId } });
+      if (!p) throw new ShopError('not_found', 'Товар не найден', 404);
+      productIds = await productGroup(p);
+    }
+    const items = q.limit ? await listReviews({ productIds, limit: q.limit, before: q.before }) : [];
+    return {
+      summary: await ratingSummary(productIds ? { productId: { in: productIds } } : {}),
+      items,
+      nextBefore: items.length === q.limit && items.length ? items[items.length - 1].id : null,
     };
   });
 
@@ -113,12 +172,14 @@ export async function shopRoutes(app: FastifyInstance) {
       where: { userId: req.user.id },
       orderBy: { id: 'desc' },
       take: 50,
-      include: { variant: { include: { product: true } } },
+      include: { variant: { include: { product: true } }, review: { select: { id: true } } },
     });
     return orders.map((o) => ({
       id: o.id, status: o.status, method: o.method, amount: o.amount, payAmount: o.payAmount, createdAt: o.createdAt,
       product: o.variant.product.title, variant: o.variant.title, icon: o.variant.product.icon, glass: o.variant.product.glass,
+      access: o.variant.product.access,
       recipient: o.recipient, deliveredText: o.deliveredText, payUrl: o.status === 'PENDING_PAYMENT' ? o.payUrl : null,
+      reviewed: Boolean(o.review),
     }));
   });
 
@@ -126,7 +187,7 @@ export async function shopRoutes(app: FastifyInstance) {
     const id = Number((req.params as { id: string }).id);
     const o = await prisma.order.findFirst({
       where: { id, userId: req.user.id },
-      include: { variant: { include: { product: true } }, messages: { orderBy: { id: 'asc' } } },
+      include: { variant: { include: { product: true } }, messages: { orderBy: { id: 'asc' } }, review: true },
     });
     if (!o) throw new ShopError('not_found', 'Заказ не найден', 404);
     const s = await getSettings();
@@ -134,9 +195,13 @@ export async function shopRoutes(app: FastifyInstance) {
       id: o.id, status: o.status, method: o.method, amount: o.amount, discount: o.discount, payAmount: o.payAmount,
       createdAt: o.createdAt, recipient: o.recipient, deliveredText: o.deliveredText,
       product: o.variant.product.title, variant: o.variant.title, icon: o.variant.product.icon, glass: o.variant.product.glass,
+      access: o.variant.product.access, productId: o.variant.productId,
       payUrl: o.status === 'PENDING_PAYMENT' ? o.payUrl : null,
       manual: isManual(o.method) ? manualInstructions(o, s) : null,
       messages: o.messages.map((m) => ({ id: m.id, text: m.text, fromAdmin: m.fromAdmin, createdAt: m.createdAt })),
+      reviewed: Boolean(o.review),
+      review: o.review ? { rating: o.review.rating, text: o.review.text, createdAt: o.review.createdAt } : null,
+      canReview: o.status === 'DELIVERED',
     };
   });
 
@@ -160,6 +225,17 @@ export async function shopRoutes(app: FastifyInstance) {
     const id = Number((req.params as { id: string }).id);
     const o = await cancelByUser(id, req.user.id);
     return { id: o!.id, status: o!.status };
+  });
+
+  const reviewBody = z.object({
+    rating: z.number().int().min(1, 'Поставьте оценку от 1 до 5').max(5, 'Поставьте оценку от 1 до 5'),
+    text: z.string().max(REVIEW_TEXT_MAX * 2).optional(),
+  });
+  app.post('/api/orders/:id/review', async (req) => {
+    const id = Number((req.params as { id: string }).id);
+    const b = reviewBody.parse(req.body);
+    const r = await submitReview(id, req.user.id, b);
+    return { rating: r.rating, text: r.text, createdAt: r.createdAt };
   });
 
   const msgBody = z.object({ text: z.string().trim().min(1).max(2000) });

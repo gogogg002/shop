@@ -85,6 +85,22 @@ export function startBot() {
         reply_markup: new InlineKeyboard().webApp('Открыть заказ', webUrl(`/orders/${o.id}`)),
       }).catch((e) => console.error('notify user failed', e.message));
     },
+    async orderDelivered(o, text) {
+      // Кнопка сразу открывает экран отзыва в мини-аппе
+      const kb = new InlineKeyboard()
+        .webApp('⭐ Оставить отзыв', webUrl(`/orders/${o.id}/review`)).row()
+        .webApp('Открыть заказ', webUrl(`/orders/${o.id}`));
+      await bot.api.sendMessage(Number(o.user.tgId), `${text}\n\nСпасибо за покупку! Оцените заказ, это займёт 10 секунд.`, {
+        reply_markup: kb,
+      }).catch((e) => console.error('notify user failed', e.message));
+    },
+    async newReview(r) {
+      const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+      const body = [`${stars} Новый отзыв к заказу №${r.orderId}`, `${r.product} · ${r.variant}`, `От: ${r.author}`, '', r.text || 'Без текста'].join('\n');
+      await toAdmins((chat) => bot.api.sendMessage(chat, body, {
+        reply_markup: new InlineKeyboard().webApp('Все отзывы', webUrl('/admin/reviews')).webApp('Заказ', webUrl(`/admin/orders/${r.orderId}`)),
+      }));
+    },
     async chatMessage(o, text, fromAdmin) {
       if (fromAdmin) {
         await bot.api.sendMessage(Number(o.user.tgId), `💬 Поддержка по заказу №${o.id}:\n${text}`, {

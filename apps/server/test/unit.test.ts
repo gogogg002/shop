@@ -52,3 +52,18 @@ describe('цены', () => {
     expect(rubToUsdt(339000, 95)).toBe(35.69); // 3390 / 95 = 35.684
   });
 });
+
+describe('получатель', () => {
+  it('username и телефон приводятся к одному виду', async () => {
+    const { normalizeRecipient } = await import('../src/services/orders.js');
+    expect(normalizeRecipient('USERNAME', 'durov')).toBe('@durov');
+    expect(normalizeRecipient('USERNAME', '@du')).toBeNull();
+    expect(normalizeRecipient('USERNAME', 'a b c d')).toBeNull();
+    expect(normalizeRecipient('PHONE', '+7 (900) 123-45-67')).toBe('+79001234567');
+    expect(normalizeRecipient('PHONE', '89001234567')).toBe('+79001234567');
+    expect(normalizeRecipient('PHONE', '+380 67 123 45 67')).toBe('+380671234567');
+    expect(normalizeRecipient('PHONE', '12345')).toBeNull();
+    expect(normalizeRecipient('PHONE', '@durov')).toBeNull();
+    expect(normalizeRecipient('PHONE', undefined)).toBeNull();
+  });
+});

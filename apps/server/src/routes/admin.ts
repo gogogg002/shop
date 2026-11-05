@@ -126,6 +126,9 @@ export async function adminRoutes(app: FastifyInstance) {
     glass: z.enum(['RED', 'WHITE', 'DARK']).default('RED'),
     deliveryType: z.enum(['MANUAL', 'CODES']).default('MANUAL'),
     needsRecipient: z.boolean().default(true),
+    recipientKind: z.enum(['USERNAME', 'PHONE']).default('USERNAME'),
+    access: z.enum(['UNSPECIFIED', 'NO_LOGIN', 'WITH_LOGIN']).default('UNSPECIFIED'),
+    wholesale: z.boolean().default(false),
     isActive: z.boolean().default(true),
     isHit: z.boolean().default(false),
     sort: z.number().int().default(0),
@@ -166,6 +169,44 @@ export async function adminRoutes(app: FastifyInstance) {
     const values = [...new Set(codes.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
     const r = await prisma.code.createMany({ data: values.map((value) => ({ value, variantId: idParam(req) })) });
     return { added: r.count };
+  });
+
+  // ---------- отзывы ----------
+  app.get('/api/admin/reviews', async (req) => {
+    const q = z.object({
+      filter: z.enum(['all', 'visible', 'hidden', 'low']).default('all'),
+      before: z.coerce.number().int().positive().optional(),
+    }).parse(req.query);
+    const where = {
+      ...(q.filter === 'visible' ? { isHidden: false } : q.filter === 'hidden' ? { isHidden: true } : {}),
+      ...(q.filter === 'low' ? { rating: { lte: 3 } } : {}),
+      ...(q.before ? { id: { lt: q.before } } : {}),
+    };
+    const [items, all, visible] = await Promise.all([
+      prisma.review.findMany({
+        where, orderBy: { id: 'desc' }, take: 50,
+        include: {
+          user: { select: { tgId: true, username: true, firstName: true } },
+          product: { select: { title: true, access: true, icon: true, glass: true } },
+          order: { select: { id: true, variant: { select: { title: true } } } },
+        },
+      }),
+      prisma.review.aggregate({ _avg: { rating: true }, _count: { _all: true } }),
+      prisma.review.count({ where: { isHidden: false } }),
+    ]);
+    return {
+      items,
+      total: all._count._all,
+      visible,
+      avg: all._count._all ? Math.round((all._avg.rating ?? 0) * 10) / 10 : 0,
+      nextBefore: items.length === 50 ? items[items.length - 1].id : null,
+    };
+  });
+  app.patch('/api/admin/reviews/:id', async (req) => {
+    const { isHidden } = z.object({ isHidden: z.boolean() }).parse(req.body);
+    const id = idParam(req);
+    if (!(await prisma.review.findUnique({ where: { id }, select: { id: true } }))) throw new ShopError('not_found', 'Отзыв не найден', 404);
+    return prisma.review.update({ where: { id }, data: { isHidden } });
   });
 
   // ---------- промокоды ----------

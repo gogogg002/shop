@@ -1,4 +1,4 @@
-import type { PaymentMethod, Prisma } from '@prisma/client';
+import type { PaymentMethod, Prisma, RecipientKind } from '@prisma/client';
 import { prisma } from '../db.js';
 import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
@@ -22,6 +22,22 @@ export function computeTotal(price: number, feePercent: number, promo?: { amount
   const afterPromo = price - discount;
   const fee = Math.round((afterPromo * feePercent) / 100);
   return { discount, fee, amount: afterPromo + fee };
+}
+
+/**
+ * Приводит получателя к одному виду: @username или +79001234567.
+ * null — если формат не подходит.
+ */
+export function normalizeRecipient(kind: RecipientKind, raw: string | undefined): string | null {
+  const v = (raw ?? '').trim();
+  if (kind === 'PHONE') {
+    const digits = v.replace(/[\s()\-.]/g, '').replace(/^\+/, '');
+    if (!/^\d{10,15}$/.test(digits)) return null;
+    // российский номер с восьмёркой: 89001234567 → +79001234567
+    return '+' + (digits.length === 11 && digits.startsWith('8') ? '7' + digits.slice(1) : digits);
+  }
+  const u = v.replace(/^@?/, '@');
+  return /^@[A-Za-z0-9_]{4,32}$/.test(u) ? u : null;
 }
 
 /** ₽ (копейки) → гривны, округление вверх до целой гривны */
@@ -70,9 +86,14 @@ export async function createOrder(input: {
   const variant = await prisma.variant.findUnique({ where: { id: input.variantId }, include: { product: true } });
   if (!variant || !variant.isActive || !variant.product.isActive) throw new ShopError('variant_unavailable', 'Товар недоступен');
 
-  const recipient = input.recipient?.trim().replace(/^@?/, '@');
-  if (variant.product.needsRecipient && (!recipient || !/^@[A-Za-z0-9_]{4,32}$/.test(recipient)))
-    throw new ShopError('bad_recipient', 'Укажите username получателя, например @durov');
+  const recipient = variant.product.needsRecipient ? normalizeRecipient(variant.product.recipientKind, input.recipient) : null;
+  if (variant.product.needsRecipient && !recipient)
+    throw new ShopError(
+      'bad_recipient',
+      variant.product.recipientKind === 'PHONE'
+        ? 'Укажите номер телефона аккаунта, например +7 900 123-45-67'
+        : 'Укажите username получателя, например @durov',
+    );
 
   if (input.method === 'BALANCE') throw new ShopError('method_unavailable', 'Оплата с баланса пока не подключена');
   const methodKey = input.method as keyof ShopSettings['methods'];
@@ -102,7 +123,7 @@ export async function createOrder(input: {
     data: {
       userId: input.userId,
       variantId: variant.id,
-      recipient: variant.product.needsRecipient ? recipient : null,
+      recipient,
       method: input.method,
       amount,
       discount,
@@ -186,7 +207,7 @@ async function deliverCode(orderId: number) {
   });
   if (!done) return null;
   const order = (await loadOrder(orderId))!;
-  await notifier().orderStatusToUser(order, `Заказ №${order.id} выдан. Код: ${done}`);
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен.\nКод: ${done}`);
   return order;
 }
 
@@ -216,7 +237,8 @@ export async function deliver(orderId: number, text?: string) {
   });
   if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
   const order = (await loadOrder(orderId))!;
-  await notifier().orderStatusToUser(order, `Заказ №${order.id} выдан${text ? `: ${text}` : ''}. Спасибо за покупку!`);
+  const what = `${order.variant.product.title} · ${order.variant.title}`;
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${what}.${text ? `\n${text}` : ''}`);
   return order;
 }
 

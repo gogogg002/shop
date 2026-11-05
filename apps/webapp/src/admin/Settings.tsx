@@ -76,7 +76,7 @@ export function Settings() {
         <label className="field sp"><span>Курс USDT, ₽</span><input inputMode="decimal" value={s.usdtRate} onChange={(e) => setS({ ...s, usdtRate: num(e.target.value) })} /></label>
         <label className="field sp"><span>SLA выдачи, мин</span><input inputMode="numeric" value={s.slaMin} onChange={(e) => setS({ ...s, slaMin: num(e.target.value) })} /></label>
       </div>
-      <label className="field"><span>Username поддержки</span><input value={s.supportUsername} onChange={(e) => setS({ ...s, supportUsername: e.target.value })} placeholder="@support" /></label>
+      <label className="field"><span>Username поддержки (сюда пишут по опту)</span><input value={s.supportUsername} onChange={(e) => setS({ ...s, supportUsername: e.target.value.replace(/^@/, '').trim() })} placeholder="TimaGopl" /></label>
 
       <button className="btn block" disabled={busy} onClick={save}>{busy ? 'Сохраняем…' : 'Сохранить настройки'}</button>
     </div>

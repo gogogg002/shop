@@ -1,0 +1,66 @@
+import { useState } from 'react';
+import { api, accessLabel, ratingText, shortDate, type AdminReview } from '../api';
+import { Key, Stars, Toggle, useLoad, useToast } from '../ui/kit';
+
+interface Page { items: AdminReview[]; total: number; visible: number; avg: number; nextBefore: number | null }
+
+const FILTERS = [['all', 'Все'], ['low', '1–3 ★'], ['visible', 'На витрине'], ['hidden', 'Скрытые']] as const;
+
+export function AdminReviews() {
+  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
+  const { data, error, setData } = useLoad(() => api<Page>(`/api/admin/reviews?filter=${filter}`), [filter]);
+  const toast = useToast();
+
+  async function toggle(r: AdminReview, visible: boolean) {
+    const prev = data!;
+    setData({ ...prev, items: prev.items.map((x) => (x.id === r.id ? { ...x, isHidden: !visible } : x)) });
+    try {
+      await api(`/api/admin/reviews/${r.id}`, { method: 'PATCH', body: { isHidden: !visible } });
+      toast(visible ? 'Отзыв снова на витрине' : 'Отзыв скрыт с витрины');
+    } catch (e) {
+      toast((e as Error).message, true);
+      setData(prev);
+    }
+  }
+
+  return (
+    <div className="page">
+      <div className="glow" />
+      <div className="between">
+        <h1 className="disp" style={{ fontSize: 34 }}>Отзывы</h1>
+        {data && data.total > 0 && <span className="pill m">★ {ratingText(data.avg)} · {data.total}</span>}
+      </div>
+      <div className="row" style={{ gap: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {FILTERS.map(([k, t]) => (
+          <button key={k} className={`pill ${filter === k ? 'solid' : 'm'}`} style={{ height: 32, padding: '0 14px', fontSize: 13.5 }} onClick={() => setFilter(k)}>{t}</button>
+        ))}
+      </div>
+      {error && <div className="empty">{error}</div>}
+      {!data && !error && <div className="skeleton" style={{ height: 240 }} />}
+      {data && !data.items.length && <div className="empty">Здесь пока пусто. Отзывы приходят после выполненных заказов, бот пришлёт уведомление.</div>}
+
+      {data?.items.map((r) => {
+        const buyer = r.user.username ? `@${r.user.username}` : r.user.firstName ?? r.user.tgId;
+        return (
+          <article key={r.id} className="card pad col" style={{ gap: 10, opacity: r.isHidden ? 0.55 : 1 }}>
+            <div className="row" style={{ gap: 12 }}>
+              <Key icon={r.product.icon} glass={r.product.glass} size={40} />
+              <div className="sp" style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600 }} className="ellipsis">
+                  {r.product.title} · {r.order.variant.title}{accessLabel[r.product.access] ? ` · ${accessLabel[r.product.access].toLowerCase()}` : ''}
+                </div>
+                <div className="muted small ellipsis">{buyer} · <a href={`#/admin/orders/${r.orderId}`} style={{ color: 'var(--a2)' }}>заказ №{r.orderId}</a> · {shortDate(r.createdAt)}</div>
+              </div>
+            </div>
+            <Stars value={r.rating} size={18} />
+            {r.text ? <p style={{ lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.text}</p> : <p className="muted small">Без текста</p>}
+            <div className="between">
+              <span className="small muted">{r.isHidden ? 'Скрыт с витрины' : 'Виден на витрине'}</span>
+              <Toggle on={!r.isHidden} onChange={(v) => toggle(r, v)} label="Показывать на витрине" />
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}

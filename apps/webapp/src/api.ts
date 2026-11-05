@@ -62,6 +62,9 @@ export async function copy(text: string) {
 
 // ---- типы ответов API ----
 export type Glass = 'RED' | 'WHITE' | 'DARK';
+export type Access = 'UNSPECIFIED' | 'NO_LOGIN' | 'WITH_LOGIN';
+export type RecipientKind = 'USERNAME' | 'PHONE';
+export const accessLabel: Record<Access, string> = { UNSPECIFIED: '', NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом' };
 export type Method = 'CRYPTOBOT' | 'XROCKET' | 'LOLZ' | 'SBP' | 'UAH';
 export type OrderStatus = 'PENDING_PAYMENT' | 'AWAITING_CONFIRMATION' | 'PAID' | 'DELIVERED' | 'REJECTED' | 'CANCELLED' | 'REFUNDED';
 
@@ -73,22 +76,55 @@ export interface Me {
 }
 export interface CatalogCategory {
   id: number; slug: string; title: string;
-  products: { id: number; title: string; subtitle: string; icon: string; glass: Glass; isHit: boolean; minPrice: number }[];
+  products: {
+    id: number; title: string; subtitle: string; icon: string; glass: Glass; isHit: boolean; minPrice: number;
+    access: Access; modes: Access[];
+  }[];
 }
+export interface Rating { avg: number; count: number }
+export interface PublicReview {
+  id: number; rating: number; text: string; author: string; product: string; access: Access; variant: string; createdAt: string;
+}
+export interface ReviewFeed { summary: Rating; items: PublicReview[]; nextBefore: number | null }
 export interface ProductView {
   id: number; title: string; subtitle: string; description: string; icon: string; glass: Glass; category: string;
-  needsRecipient: boolean; deliveryType: 'MANUAL' | 'CODES';
+  needsRecipient: boolean; recipientKind: RecipientKind; deliveryType: 'MANUAL' | 'CODES'; access: Access; wholesale: boolean;
+  siblings: { id: number; access: Access; label: string }[];
   variants: { id: number; title: string; price: number; oldPrice: number | null; inStock: boolean }[];
+  rating: Rating;
+  reviews: PublicReview[];
 }
 export interface OrderListItem {
   id: number; status: OrderStatus; method: Method; amount: number; payAmount: string | null; createdAt: string;
-  product: string; variant: string; icon: string; glass: Glass; recipient: string | null; deliveredText: string | null; payUrl: string | null;
+  product: string; variant: string; icon: string; glass: Glass; access: Access;
+  recipient: string | null; deliveredText: string | null; payUrl: string | null; reviewed: boolean;
 }
 export interface OrderView extends OrderListItem {
-  discount: number;
+  discount: number; productId: number;
   manual: { method: 'UAH' | 'SBP'; amount: string; requisites: { label: string; value: string }[]; comment: string } | null;
   messages: { id: number; text: string; fromAdmin: boolean; createdAt: string }[];
+  review: { rating: number; text: string; createdAt: string } | null;
+  canReview: boolean;
 }
+
+/** «4,9» и «23 отзыва» */
+export const ratingText = (avg: number) => avg.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+export function plural(n: number, one: string, few: string, many: string) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+export const reviewsWord = (n: number) => `${n.toLocaleString('ru-RU')} ${plural(n, 'отзыв', 'отзыва', 'отзывов')}`;
+export const ratingWord = ['', 'Плохо', 'Так себе', 'Нормально', 'Хорошо', 'Отлично'];
+
+/** Ссылка на чат в Telegram: внутри мини-аппа открывается без выхода из Telegram */
+export function openTelegramChat(username: string) {
+  const url = `https://t.me/${username.replace(/^@/, '')}`;
+  if (tg) tg.openTelegramLink(url);
+  else window.open(url, '_blank');
+}
+export const shortDate = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 
 export const methodLabel: Record<Method, { title: string; sub: string }> = {
   SBP: { title: 'СБП', sub: 'Перевод по номеру' },
@@ -116,6 +152,13 @@ export async function apiBlobUrl(path: string): Promise<string> {
   const res = await fetch(path, { headers });
   if (!res.ok) throw new ApiError('http', 'Не удалось загрузить чек', res.status);
   return URL.createObjectURL(await res.blob());
+}
+
+export interface AdminReview {
+  id: number; orderId: number; rating: number; text: string; isHidden: boolean; createdAt: string;
+  user: { tgId: string; username: string | null; firstName: string | null };
+  product: { title: string; access: Access; icon: string; glass: Glass };
+  order: { id: number; variant: { title: string } };
 }
 
 export interface AdminOrder {

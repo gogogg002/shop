@@ -19,6 +19,7 @@ model User {
   createdAt  DateTime  @default(now())
   orders     Order[]
   messages   Message[]
+  reviews    Review[]
 }
 
 model Category {
@@ -40,6 +41,20 @@ enum Glass {
   DARK
 }
 
+/// Как выдаём: без входа в аккаунт покупателя или со входом.
+/// Два товара с одинаковым названием и разным режимом показываются одной карточкой с вкладками.
+enum AccessMode {
+  UNSPECIFIED // не показываем покупателю
+  NO_LOGIN    // без входа: по @username, подарком, кодом
+  WITH_LOGIN  // со входом в аккаунт покупателя
+}
+
+/// Что спрашиваем у покупателя при заказе (если needsRecipient)
+enum RecipientKind {
+  USERNAME // @username в Telegram
+  PHONE    // номер телефона аккаунта, для выдачи со входом
+}
+
 model Product {
   id           Int          @id @default(autoincrement())
   categoryId   Int
@@ -50,12 +65,16 @@ model Product {
   icon         String       @default("star") // имя глифа в мини-аппе
   glass        Glass        @default(RED)
   deliveryType DeliveryType @default(MANUAL)
-  needsRecipient Boolean    @default(true) // нужен ли @username получателя
+  needsRecipient Boolean    @default(true) // спрашивать ли получателя (что именно — recipientKind)
+  recipientKind RecipientKind @default(USERNAME)
+  access       AccessMode   @default(UNSPECIFIED)
+  wholesale    Boolean      @default(false) // вариант «Опт»: покупатель пишет в поддержку
   isActive     Boolean      @default(true)
   isHit        Boolean      @default(false)
   sort         Int          @default(0)
   createdAt    DateTime     @default(now())
   variants     Variant[]
+  reviews      Review[]
 }
 
 model Variant {
@@ -125,9 +144,29 @@ model Order {
   deliveredAt DateTime?
   code        Code?
   messages    Message[]
+  review      Review?
 
   @@index([status])
   @@index([userId])
+}
+
+/// Отзыв покупателя: один на заказ, только по выданному заказу.
+model Review {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating    Int      // 1..5
+  text      String   @default("")
+  isHidden  Boolean  @default(false) // админ убрал с витрины
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, isHidden])
+  @@index([createdAt])
 }
 
 model Message {
