@@ -34,6 +34,8 @@ export function startBot() {
       reply_markup: new InlineKeyboard().webApp('Открыть магазин', config.PUBLIC_URL),
     }));
 
+  bot.command('id', (ctx) => ctx.reply(`Ваш Telegram ID: <code>${ctx.from!.id}</code>`, { parse_mode: 'HTML' }));
+
   bot.command('admin', (ctx) => {
     if (!isAdmin(BigInt(ctx.from!.id))) return;
     return ctx.reply('Админка', { reply_markup: new InlineKeyboard().webApp('Открыть админку', webUrl('/admin')) });
