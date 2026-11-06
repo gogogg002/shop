@@ -37,7 +37,10 @@ export function startBot() {
 
   bot.command('start', (ctx) =>
     ctx.reply('Krynel: подписки, Stars и пополнения за пару минут. Открывайте магазин кнопкой ниже.', {
-      reply_markup: new InlineKeyboard().webApp('Открыть магазин', config.PUBLIC_URL),
+      // Админу первой кнопкой — админка
+      reply_markup: isAdmin(BigInt(ctx.from!.id))
+        ? new InlineKeyboard().webApp('⚙️ Админка', webUrl('/admin')).row().webApp('Открыть магазин', config.PUBLIC_URL)
+        : new InlineKeyboard().webApp('Открыть магазин', config.PUBLIC_URL),
     }));
 
   bot.command('id', (ctx) => ctx.reply(`Ваш Telegram ID: <code>${ctx.from!.id}</code>`, { parse_mode: 'HTML' }));

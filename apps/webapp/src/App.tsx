@@ -77,10 +77,11 @@ function parentOf(path: string) {
 const MeCtx = createContext<Me | null>(null);
 export const useMe = () => useContext(MeCtx);
 
-function Nav({ admin, path }: { admin: boolean; path: string }) {
+function Nav({ admin, isAdmin, path }: { admin: boolean; isAdmin: boolean; path: string }) {
+  // Админу вход в админку — первой кнопкой на витрине, а из админки — обратно на витрину
   const items = admin
-    ? [['/admin', 'chart', 'Сводка'], ['/admin/orders', 'list', 'Заказы'], ['/admin/products', 'box', 'Товары'], ['/admin/reviews', 'starO', 'Отзывы'], ['/admin/settings', 'gear', 'Настройки']]
-    : [['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы']];
+    ? [['/', 'gem', 'Витрина'], ['/admin', 'chart', 'Сводка'], ['/admin/orders', 'list', 'Заказы'], ['/admin/products', 'box', 'Товары'], ['/admin/reviews', 'starO', 'Отзывы'], ['/admin/settings', 'gear', 'Настройки']]
+    : [...(isAdmin ? [['/admin', 'gear', 'Админка']] : []), ['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы']];
   const active = (to: string) => (to === '/' || to === '/admin' ? path === to : path.startsWith(to));
   return (
     <nav className="nav" aria-label="Разделы">
@@ -146,7 +147,7 @@ export function App() {
   return (
     <MeCtx.Provider value={me.data}>
       {screen}
-      {showNav && <Nav admin={isAdminPath} path={path} />}
+      {showNav && <Nav admin={isAdminPath} isAdmin={me.data.isAdmin} path={path} />}
     </MeCtx.Provider>
   );
 }
