@@ -24,6 +24,11 @@ export interface AutoProvider {
    * (подпись верна и статус перепроверен через API провайдера), иначе null.
    */
   handleWebhook(rawBody: string, headers: Record<string, string | string[] | undefined>): Promise<number | null>;
+  /**
+   * Сверка без вебхука: какие из счетов (externalId) уже оплачены. Страховка, если провайдер
+   * не прислал вебхук (не настроен адрес, сеть, сбой у провайдера).
+   */
+  paidInvoices(externalIds: string[]): Promise<Set<string>>;
 }
 
 export const rubString = (kop: number) => (kop / 100).toFixed(2);

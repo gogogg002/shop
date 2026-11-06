@@ -57,4 +57,10 @@ export const cryptobot: AutoProvider = {
     const orderId = Number(inv.payload);
     return Number.isInteger(orderId) ? orderId : null;
   },
+
+  async paidInvoices(ids) {
+    if (!ids.length) return new Set();
+    const list = await call<{ items: Invoice[] }>('getInvoices', { invoice_ids: ids.join(','), count: 1000 });
+    return new Set(list.items.filter((i) => i.status === 'paid').map((i) => String(i.invoice_id)));
+  },
 };

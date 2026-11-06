@@ -63,4 +63,13 @@ export const xrocket: AutoProvider = {
     const orderId = Number(inv.payload);
     return Number.isInteger(orderId) ? orderId : null;
   },
+
+  async paidInvoices(ids) {
+    const paid = new Set<string>();
+    for (const id of ids) {
+      const inv = await call<TgInvoice>(`/tg-invoices/${encodeURIComponent(id)}`, { method: 'GET' });
+      if (inv.status === 'paid') paid.add(id);
+    }
+    return paid;
+  },
 };

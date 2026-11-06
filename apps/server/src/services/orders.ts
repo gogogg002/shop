@@ -207,7 +207,15 @@ export async function submitProof(orderId: number, userId: number, photo: Buffer
  */
 export async function markPaid(orderId: number) {
   const changed = await prisma.order.updateMany({
-    where: { id: orderId, status: { in: ['PENDING_PAYMENT', 'AWAITING_CONFIRMATION'] } },
+    where: {
+      id: orderId,
+      OR: [
+        { status: { in: ['PENDING_PAYMENT', 'AWAITING_CONFIRMATION'] } },
+        // Счёт крипто-провайдера оплатили в последние секунды, а заказ уже сняли по таймеру
+        // или клиент отменил его и всё равно оплатил: деньги пришли, значит заказ оплачен
+        { status: 'CANCELLED', method: { notIn: ['UAH', 'SBP'] } },
+      ],
+    },
     data: { status: 'PAID', paidAt: new Date() },
   });
   if (changed.count === 0) return loadOrder(orderId);
