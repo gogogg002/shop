@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, copy, itemTitle, methodLabel, openPay, prettyPhone, rub, statusLabel, type OrderView } from '../api';
-import { Icon, Key, Stars, useLoad, useToast } from '../ui/kit';
+import { api, copy, isNetwork, itemTitle, methodLabel, openPay, prettyPhone, rub, statusLabel, type OrderView } from '../api';
+import { Icon, Key, Stale, Stars, useLoad, useToast } from '../ui/kit';
 import { go } from '../App';
-import { Chat } from '../ui/Chat';
+import { arrived, Chat } from '../ui/Chat';
 
 export function Order({ id }: { id: number }) {
   const { data: o, error, reload, setData } = useLoad(() => api<OrderView>(`/api/orders/${id}`), [id]);
@@ -13,16 +13,18 @@ export function Order({ id }: { id: number }) {
   const [busy, setBusy] = useState<'proof' | 'cancel' | null>(null);
 
   // Пока заказ в работе, обновляем раз в 8 секунд: статус и ответы поддержки. Если обновление не удалось,
-  // повторяем и для закрытого заказа: иначе экран так и остался бы на ошибке
+  // повторяем и для закрытого заказа, и для заказа, который ещё ни разу не загрузился: иначе экран так и
+  // остался бы на ошибке
   const failed = !!error;
   useEffect(() => {
-    if (!o || (['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !failed)) return;
+    if (o ? ['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !failed : !failed) return;
     const h = setInterval(reload, 8000);
     return () => clearInterval(h);
   }, [o?.status, failed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <div className="page"><div className="empty">{error}</div></div>;
-  if (!o) return <div className="page"><div className="skeleton" style={{ height: 300 }} /></div>;
+  // Обновление не удалось, но заказ уже на экране: показываем его как есть, с пометкой. Иначе экран сменился
+  // бы ошибкой, и вместе с чатом пропал бы недописанный текст
+  if (!o) return <div className="page">{error ? <div className="empty">{error}</div> : <div className="skeleton" style={{ height: 300 }} />}</div>;
 
   const st = statusLabel[o.status];
 
@@ -39,7 +41,8 @@ export function Order({ id }: { id: number }) {
       setPhoto(null);
       if (file.current) file.current.value = '';
     } catch (e) {
-      toast((e as Error).message, true);
+      // Связь могла оборваться, пока сервер пересылал чек админам: он дойдёт, а статус обновится сам
+      toast(isNetwork(e) ? 'Связь оборвалась, чек мог уже уйти. Подождите минуту: статус обновится сам' : (e as Error).message, true);
     } finally {
       // И после ошибки: админ мог уже решить по заказу, а ответ мог потеряться после того, как чек дошёл
       reload();
@@ -54,7 +57,8 @@ export function Order({ id }: { id: number }) {
       // Кнопки отмены пропадают сразу, не дожидаясь перезагрузки заказа: второе нажатие не придёт ошибкой
       setData((d) => d && { ...d, status: r.status });
     } catch (e) {
-      toast((e as Error).message, true);
+      // Отмена могла пройти, а ответ потеряться: перезагрузка ниже покажет, отменён ли заказ
+      toast(isNetwork(e) ? 'Связь оборвалась. Если заказ не отменился, нажмите ещё раз' : (e as Error).message, true);
     } finally {
       reload();
       setBusy(null);
@@ -67,6 +71,7 @@ export function Order({ id }: { id: number }) {
     <div className="page">
       <div className="glow" />
       <div className="between"><h1 className="disp h1">Заказ №{o.id}</h1><span className={`pill ${st.tone}`}>{st.text}</span></div>
+      {error && <Stale error={error} />}
 
       <div className="card pad row">
         <Key icon={o.icon} glass={o.glass} size={50} />
@@ -154,9 +159,23 @@ export function Order({ id }: { id: number }) {
         asAdmin={false}
         messages={o.messages}
         onSend={async (text) => {
-          const m = await api<OrderView['messages'][number]>(`/api/orders/${id}/messages`, { body: { text } });
-          // К текущему заказу, а не к копии с момента отправки: та затёрла бы статус, пришедший за это время
-          setData((d) => d && (d.messages.some((x) => x.id === m.id) ? d : { ...d, messages: [...d.messages, m] }));
+          const known = new Set(o.messages.map((m) => m.id));
+          try {
+            const m = await api<OrderView['messages'][number]>(`/api/orders/${id}/messages`, { body: { text } });
+            // К текущему заказу, а не к копии с момента отправки: та затёрла бы статус, пришедший за это время
+            setData((d) => d && (d.messages.some((x) => x.id === m.id) ? d : { ...d, messages: [...d.messages, m] }));
+          } catch (e) {
+            if (!isNetwork(e)) throw e;
+            // Ответ мог потеряться, когда сообщение уже сохранено: прежде чем предлагать повтор, смотрим, дошло ли оно
+            const fresh = await api<OrderView>(`/api/orders/${id}`).catch(() => null);
+            if (fresh) setData(fresh);
+            if (!fresh) throw new Error('Связь оборвалась. Если сообщение появится в чате, второй раз его не отправляйте');
+            if (!arrived(fresh.messages, known, text, false)) throw new Error('Связь оборвалась, сообщение не дошло. Отправьте ещё раз');
+          } finally {
+            // Обновление, ушедшее до сообщения, могло вернуться позже и стереть его с экрана: новый запрос отменяет
+            // старый и приносит чат таким, какой он на сервере
+            reload();
+          }
         }}
       />
     </div>
