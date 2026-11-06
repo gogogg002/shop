@@ -449,6 +449,62 @@ describe('кривой ввод — ответ 400, а не падение се�
     expect((await quote()).statusCode).toBe(200);
   });
 
+  it('админ решил, пока чек ещё расходится по админам: решение не затирается', async () => {
+    for (const [action, want] of [['confirm', 'PAID'], ['reject', 'REJECTED']] as const) {
+      const id = (await as(BUYER).post('/api/orders', { variantId: solo.variants[0].id, method: 'UAH', recipient: '@durov' })).json().id;
+      const original = notifier.manualPaymentProof;
+      let reached!: () => void;
+      let release!: () => void;
+      const atNotify = new Promise<void>((r) => (reached = r));
+      const gate = new Promise<void>((r) => (release = r));
+      notifier.manualPaymentProof = async () => { reached(); await gate; return 'file-1'; };
+      try {
+        const proof = as(BUYER).post(`/api/orders/${id}/proof`, {});
+        await atNotify; // фото дошло до первого админа, остальным ещё грузится
+        const decided = await as(ADMIN).post(`/api/admin/orders/${id}/${action}`, action === 'reject' ? { reason: 'Нет перевода' } : {});
+        expect(decided.statusCode).toBe(200);
+        release();
+        expect((await proof).json().status).toBe(want);
+      } finally {
+        notifier.manualPaymentProof = original;
+      }
+      expect(await prisma.order.findUniqueOrThrow({ where: { id } })).toMatchObject({ status: want, proofFileId: 'file-1' });
+    }
+  });
+
+  it('кривой JSON и слишком большое фото чека — ошибка запроса, а не 500', async () => {
+    const bad = await app.inject({ method: 'POST', url: '/api/orders/quote', payload: '{"variantId":', headers: { 'x-dev-user': BUYER, 'content-type': 'application/json' } });
+    expect(bad.statusCode).toBe(400);
+
+    const id = (await as(BUYER).post('/api/orders', { variantId: solo.variants[0].id, method: 'UAH', recipient: '@durov' })).json().id;
+    const boundary = 'krynel-test';
+    const payload = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="check.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+      Buffer.alloc(9 * 1024 * 1024, 1),
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const big = await app.inject({
+      method: 'POST', url: `/api/orders/${id}/proof`, payload,
+      headers: { 'x-dev-user': BUYER, 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(big.statusCode).toBe(413);
+    expect(big.json().message).toMatch(/8 МБ/);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id } })).status).toBe('PENDING_PAYMENT');
+  });
+
+  it('ошибка базы в покупательском запросе остаётся 500: это баг, а не кривой ввод', async () => {
+    const original = prisma.order.findMany;
+    const { Prisma } = await import('@prisma/client');
+    prisma.order.findMany = (async () => {
+      throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
+    }) as unknown as typeof prisma.order.findMany;
+    try {
+      expect((await as(BUYER).get('/api/orders')).statusCode).toBe(500);
+    } finally {
+      prisma.order.findMany = original;
+    }
+  });
+
   it('две одинаковые правки отзыва одновременно: обе успешны, правка одна', async () => {
     for (let round = 0; round < 5; round++) {
       const id = await deliveredOrder(solo.variants[0].id, '@durov');
