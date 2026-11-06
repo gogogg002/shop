@@ -10,6 +10,12 @@ type VariantDraft = { id?: number; title: string; price: string; oldPrice: strin
 const toRub = (kop: number | null) => (kop == null ? '' : String(kop / 100));
 const toKop = (s: string) => Math.round(Number(s.replace(',', '.').replace(/\s/g, '')) * 100);
 
+/** Цвет кристалла на обложке. В базе поле осталось от стеклянных клавиш v3: RED, WHITE, DARK */
+const GLASS_LABEL: Record<Glass, string> = { RED: 'Лайм', WHITE: 'Лёд', DARK: 'Графит' };
+const GLASS_SWATCH: Record<Glass, string> = {
+  RED: 'linear-gradient(135deg,#DDFB86,#6A9426)', WHITE: 'linear-gradient(135deg,#FFFFFF,#678190)', DARK: 'linear-gradient(135deg,#AEB3BC,#292C33)',
+};
+
 export function ProductEdit({ id }: { id: number | null }) {
   const toast = useToast();
   const cats = useLoad(() => api<{ id: number; title: string }[]>('/api/admin/categories'));
@@ -110,8 +116,9 @@ export function ProductEdit({ id }: { id: number | null }) {
           <div className="cap">Обложка</div>
           <div className="row" style={{ gap: 8 }}>
             {(['RED', 'WHITE', 'DARK'] as Glass[]).map((g) => (
-              <button key={g} aria-label={`Стекло ${g}`} onClick={() => set('glass', g)} className={`key ${g}`}
-                style={{ width: 28, height: 28, borderRadius: 14, outline: p.glass === g ? '2px solid #fff' : 'none', outlineOffset: 2 }} />
+              <button key={g} aria-pressed={p.glass === g} onClick={() => set('glass', g)} className={`pill ${p.glass === g ? 'a' : 'm'}`} style={{ height: 30, padding: '0 11px 0 8px' }}>
+                <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 4, rotate: '45deg', background: GLASS_SWATCH[g] }} />{GLASS_LABEL[g]}
+              </button>
             ))}
           </div>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>

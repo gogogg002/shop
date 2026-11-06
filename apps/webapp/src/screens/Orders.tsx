@@ -20,7 +20,7 @@ export function Orders() {
         const st = statusLabel[o.status];
         const step = o.status === 'PAID' ? 2 : o.status === 'AWAITING_CONFIRMATION' ? 1 : 0;
         return (
-          <a key={o.id} href={`#/orders/${o.id}`} className="card pad" style={{ borderColor: 'rgba(255,46,62,.25)', background: 'linear-gradient(160deg,rgba(255,46,62,.12),rgba(255,255,255,.02) 55%)' }}>
+          <a key={o.id} href={`#/orders/${o.id}`} className="card pad lit">
             <div className="between"><span className={`pill ${st.tone}`}>{st.text}</span><span className="mono muted small">#{o.id} · {fmt(o.createdAt)}</span></div>
             <div className="row" style={{ marginTop: 14 }}>
               <Key icon={o.icon} glass={o.glass} size={46} />
@@ -30,7 +30,7 @@ export function Orders() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 16 }}>
               {['Оплата', 'Выдаём', 'Получен'].map((t, i) => (
                 <div key={t}>
-                  <div style={{ height: 4, borderRadius: 2, background: i <= step ? 'var(--a)' : 'var(--s3)' }} />
+                  <div style={{ height: 4, borderRadius: 2, background: i <= step ? 'var(--a)' : 'var(--s3)', boxShadow: i === step ? '0 0 12px var(--lime-glow)' : undefined }} />
                   <div style={{ fontSize: 12, marginTop: 7, fontWeight: 600, color: i === step ? 'var(--a2)' : i < step ? 'var(--t)' : 'var(--m)' }}>{t}</div>
                 </div>
               ))}

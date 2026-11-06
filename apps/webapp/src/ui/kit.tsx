@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Glass } from '../api';
+import { CrystalCover, FacetStar, glyphOf, tintOf } from './Crystal';
 
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 
@@ -12,6 +13,7 @@ const glyphs: Record<string, ReactNode> = {
   spark: <path fill="currentColor" d="M12 2c.6 4.8 2.7 7.4 8 8.2v1.6c-5.3.8-7.4 3.4-8 8.2h-1.6c-.6-4.8-2.7-7.4-8-8.2v-1.6c5.3-.8 7.4-3.4 8-8.2z" />,
   wave: <g {...P} strokeWidth={2.4}><path d="M5 9.2c4.6-1.4 9.6-1 14 1.3" /><path d="M6 12.8c3.8-1 7.8-.7 11.4 1.1" /><path d="M7 16.2c3-.7 6-.5 8.7.8" /></g>,
   gift: <g {...P}><rect x="4" y="9" width="16" height="11" rx="2" /><path d="M12 9v11M3.5 9h17M12 9c-2-4-6-4-6-1.5S10 9 12 9zm0 0c2-4 6-4 6-1.5S14 9 12 9z" /></g>,
+  gem: <g {...P} strokeWidth={1.8}><path d="M6.5 4h11L21 9l-9 11L3 9z" /><path d="M3 9h18M9.5 4 12 9l2.5-5M12 9v11" /></g>,
   grid: <g {...P} strokeWidth={1.9}><rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><rect x="13.5" y="13.5" width="7" height="7" rx="3.5" /></g>,
   list: <g {...P} strokeWidth={1.9}><rect x="4" y="3.5" width="16" height="17" rx="3" /><path d="M8 9h8M8 13h8M8 17h5" /></g>,
   user: <g {...P} strokeWidth={1.9}><circle cx="12" cy="8.5" r="4" /><path d="M4.5 20c1.3-3.6 4.2-5.3 7.5-5.3s6.2 1.7 7.5 5.3" /></g>,
@@ -33,17 +35,13 @@ const glyphs: Record<string, ReactNode> = {
 
 export const productIcons = ['star', 'starO', 'bolt', 'pad', 'spark', 'wave', 'gift'];
 
-const STAR = 'M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6L2.5 9.3l6.6-.8z';
-
-/** Звёзды рейтинга: только показ или выбор оценки (onChange) */
+/** Звёзды рейтинга (гранёные): только показ или выбор оценки (onChange) */
 export function Stars({ value, size = 16, onChange, label = 'Оценка' }: { value: number; size?: number; onChange?: (v: number) => void; label?: string }) {
   const filled = Math.round(value);
   if (!onChange) {
     return (
       <span className="stars" role="img" aria-label={`Оценка ${value} из 5`}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className={i <= filled ? 'on' : ''}><path d={STAR} /></svg>
-        ))}
+        {[1, 2, 3, 4, 5].map((i) => <FacetStar key={i} size={size} on={i <= filled} />)}
       </span>
     );
   }
@@ -51,7 +49,7 @@ export function Stars({ value, size = 16, onChange, label = 'Оценка' }: { 
     <div className="stars-input" role="radiogroup" aria-label={label}>
       {[1, 2, 3, 4, 5].map((i) => (
         <button key={i} type="button" role="radio" aria-checked={value === i} aria-label={`${i} из 5`} className={i <= value ? 'on' : ''} onClick={() => onChange(i)}>
-          <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d={STAR} /></svg>
+          <FacetStar size={size} on={i <= value} glow={i <= value && i === value} />
         </button>
       ))}
     </div>
@@ -62,10 +60,12 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{glyphs[name] ?? glyphs.star}</svg>;
 }
 
+/** Обложка товара в списках: кристалл товара в тёмной ячейке (стиль «Кристалл») */
 export function Key({ icon, glass, size = 48, style }: { icon: string; glass: Glass; size?: number; style?: React.CSSProperties }) {
+  const tint = tintOf(glass);
   return (
-    <span className={`key ${glass}`} style={{ width: size, height: size, ...style }}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">{glyphs[icon] ?? glyphs.star}</svg>
+    <span className={`key t-${tint}`} style={{ width: size, height: size, ...style }}>
+      <CrystalCover glyph={glyphOf(icon)} tint={tint} size={Math.round(size * 1.3)} ground={false} sparkle={size >= 60} />
     </span>
   );
 }
