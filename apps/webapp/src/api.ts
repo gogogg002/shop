@@ -36,7 +36,11 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     headers['content-type'] = 'application/json';
     body = JSON.stringify(init.body);
   }
-  const res = await fetch(path, { method: init.method ?? (body ? 'POST' : 'GET'), headers, body });
+  // Обрыв связи браузер отдаёт как «Failed to fetch»: покупателю нужен понятный текст. Запрос мог и дойти,
+  // поэтому экраны после такой ошибки перечитывают заказ
+  const res = await fetch(path, { method: init.method ?? (body ? 'POST' : 'GET'), headers, body }).catch(() => {
+    throw new ApiError('network', 'Нет связи с магазином. Проверьте интернет и попробуйте ещё раз', 0);
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error ?? 'http', data.message ?? `Ошибка ${res.status}`, res.status);
   return data as T;

@@ -87,7 +87,8 @@ export function AdminOrder({ id }: { id: number }) {
         messages={o.messages ?? []}
         onSend={async (text) => {
           const m = await api<NonNullable<AO['messages']>[number]>(`/api/admin/orders/${id}/messages`, { body: { text } });
-          setData({ ...o, messages: [...(o.messages ?? []), m] });
+          // К текущему заказу, а не к копии с момента отправки: та затёрла бы статус, пришедший за это время
+          setData((d) => d && (d.messages?.some((x) => x.id === m.id) ? d : { ...d, messages: [...(d.messages ?? []), m] }));
         }}
       />
     </div>

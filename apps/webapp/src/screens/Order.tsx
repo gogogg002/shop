@@ -12,12 +12,14 @@ export function Order({ id }: { id: number }) {
   // Какой запрос сейчас идёт: пока идёт любой, обе кнопки неактивны, а подпись меняется только у нажатой
   const [busy, setBusy] = useState<'proof' | 'cancel' | null>(null);
 
-  // Пока заказ в работе, обновляем раз в 8 секунд: статус и ответы поддержки
+  // Пока заказ в работе, обновляем раз в 8 секунд: статус и ответы поддержки. Если обновление не удалось,
+  // повторяем и для закрытого заказа: иначе экран так и остался бы на ошибке
+  const failed = !!error;
   useEffect(() => {
-    if (!o || ['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status)) return;
+    if (!o || (['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !failed)) return;
     const h = setInterval(reload, 8000);
     return () => clearInterval(h);
-  }, [o?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [o?.status, failed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <div className="page"><div className="empty">{error}</div></div>;
   if (!o) return <div className="page"><div className="skeleton" style={{ height: 300 }} /></div>;
@@ -34,10 +36,13 @@ export function Order({ id }: { id: number }) {
       if (r.status === 'AWAITING_CONFIRMATION') toast('Отправили на проверку. Обычно это занимает до 15 минут');
       // Форма чека пропадает сразу, не дожидаясь перезагрузки: второе нажатие не отправит чек ещё раз
       setData((d) => d && { ...d, status: r.status });
-      reload();
+      setPhoto(null);
+      if (file.current) file.current.value = '';
     } catch (e) {
       toast((e as Error).message, true);
     } finally {
+      // И после ошибки: админ мог уже решить по заказу, а ответ мог потеряться после того, как чек дошёл
+      reload();
       setBusy(null);
     }
   }
@@ -48,10 +53,10 @@ export function Order({ id }: { id: number }) {
       const r = await api<{ status: OrderView['status'] }>(`/api/orders/${id}/cancel`, { method: 'POST', body: {} });
       // Кнопки отмены пропадают сразу, не дожидаясь перезагрузки заказа: второе нажатие не придёт ошибкой
       setData((d) => d && { ...d, status: r.status });
-      reload();
     } catch (e) {
       toast((e as Error).message, true);
     } finally {
+      reload();
       setBusy(null);
     }
   }
@@ -150,7 +155,8 @@ export function Order({ id }: { id: number }) {
         messages={o.messages}
         onSend={async (text) => {
           const m = await api<OrderView['messages'][number]>(`/api/orders/${id}/messages`, { body: { text } });
-          setData({ ...o, messages: [...o.messages, m] });
+          // К текущему заказу, а не к копии с момента отправки: та затёрла бы статус, пришедший за это время
+          setData((d) => d && (d.messages.some((x) => x.id === m.id) ? d : { ...d, messages: [...d.messages, m] }));
         }}
       />
     </div>
