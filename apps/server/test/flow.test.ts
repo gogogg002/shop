@@ -193,6 +193,30 @@ describe('коды', () => {
     const r = await api(CLIENT).post('/api/orders', { variantId: steamVariant, method: 'UAH' });
     expect(r.json().error).toBe('out_of_stock');
   });
+
+  it('своё количество на товаре с кодами: код на фиксированную сумму не выдаётся, заказ уходит в ручную выдачу', async () => {
+    const steam = await prisma.variant.findUniqueOrThrow({ where: { id: steamVariant } });
+    const own = await prisma.variant.create({
+      data: { productId: steam.productId, title: 'Своя сумма', price: 110, cost: 100, perUnit: true, unit: '₽ на Steam', minQty: 100, maxQty: 50000 },
+    });
+    const upload = await api(ADMIN).post(`/api/admin/variants/${own.id}/codes`, { codes: 'STEAM-500\n' });
+    expect(upload.statusCode).toBe(400);
+    expect(upload.json().error).toBe('per_unit_codes');
+    // код, попавший к варианту в обход админки, тоже не выдаётся
+    await prisma.code.create({ data: { variantId: own.id, value: 'STEAM-500' } });
+
+    const view = (await api(CLIENT).get(`/api/products/${steam.productId}`)).json();
+    expect(view.variants.find((v: { id: number }) => v.id === own.id).inStock).toBe(true);
+    const created = await api(CLIENT).post('/api/orders', { variantId: own.id, method: 'UAH', quantity: 100 });
+    expect(created.statusCode).toBe(200);
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: created.json().id } });
+    expect(o).toMatchObject({ amount: R(110), quantity: 100 });
+    const paid = (await api(ADMIN).post(`/api/admin/orders/${o.id}/confirm`)).json();
+    expect(paid.status).toBe('PAID');
+    expect(paid.deliveredText).toBeNull();
+    expect(await prisma.code.count({ where: { variantId: own.id, orderId: null } })).toBe(1);
+    await prisma.variant.update({ where: { id: own.id }, data: { isActive: false } });
+  });
 });
 
 describe('админ: товары и цены', () => {

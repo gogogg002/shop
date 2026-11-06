@@ -127,4 +127,57 @@ describe('своё количество: Stars и Steam', () => {
     expect(o).toMatchObject({ amount: R(1100), cost: R(1000), quantity: 1000, recipient: 'gaben' });
     await expect(createOrder({ userId: user.id, variantId: v.id, method: 'UAH', recipient: 'gaben', quantity: 5 })).rejects.toThrow(/от 100/);
   });
+
+  it('СБП: сумма с копейками переводится ровно, без округления до рубля', async () => {
+    const { manualInstructions } = await import('../src/services/orders.js');
+    const { getSettings } = await import('../src/services/settings.js');
+    const s = await getSettings();
+    // 51 звезда по 1,40 ₽
+    expect(manualInstructions({ id: 1, method: 'SBP', amount: 7140 }, s).amount).toBe('71,40 ₽');
+    expect(manualInstructions({ id: 2, method: 'SBP', amount: 7000 }, s).amount).toBe('70 ₽');
+  });
+
+  it('миграция не стирает коды Steam и не возвращает своё количество, которое админ выключил', async () => {
+    const games = await prisma.category.create({ data: { slug: 'games', title: 'Игры' } });
+    const steam = await prisma.product.create({
+      data: {
+        categoryId: games.id, title: 'Пополнение Steam', deliveryType: 'CODES', needsRecipient: false,
+        variants: { create: [{ title: '500 ₽', price: R(525), cost: R(500) }, { title: '1 000 ₽', price: R(1050), cost: R(1000), sort: 1 }] },
+      },
+      include: { variants: true },
+    });
+    const withCodes = steam.variants.find((v) => v.title === '500 ₽')!;
+    await prisma.code.createMany({ data: [{ variantId: withCodes.id, value: 'A' }, { variantId: withCodes.id, value: 'B' }] });
+
+    await migrateCatalog(quiet);
+    const after = await prisma.variant.findMany({ where: { productId: steam.id } });
+    expect(after.find((v) => v.id === withCodes.id)).toMatchObject({ isActive: false });
+    expect(await prisma.code.count({ where: { variantId: withCodes.id } })).toBe(2);
+    expect(after.some((v) => v.title === '1 000 ₽')).toBe(false);
+
+    // админ выключил своё количество: следующий запуск не включает его снова и не заводит новое по цене из демо
+    await prisma.variant.updateMany({ where: { productId: steam.id, perUnit: true }, data: { isActive: false, price: 120 } });
+    await migrateCatalog(quiet);
+    const perUnit = await prisma.variant.findMany({ where: { productId: steam.id, perUnit: true } });
+    expect(perUnit).toEqual([expect.objectContaining({ isActive: false, price: 120 })]);
+  });
+
+  it('логин Steam до 64 символов проходит и на расчёте цены, и в заказе', async () => {
+    await seedCatalog();
+    const { buildApp } = await import('../src/app.js');
+    const { saveSettings } = await import('../src/services/settings.js');
+    await saveSettings({ methods: { CRYPTOBOT: false, XROCKET: false, LOLZ: false, SBP: false, UAH: true }, uah: { card: '4441', holder: 'T', bank: 'B', rate: 2.5 }, fees: { CRYPTOBOT: 0, XROCKET: 0, LOLZ: 0, SBP: 0, UAH: 0 } });
+    const app = await buildApp();
+    try {
+      const v = await prisma.variant.findFirstOrThrow({ where: { perUnit: true, product: { title: 'Пополнение Steam' } } });
+      const login = 'a'.repeat(60);
+      const headers = { 'x-dev-user': '7100' };
+      const quote = await app.inject({ method: 'POST', url: '/api/orders/quote', headers, payload: { variantId: v.id, method: 'UAH', recipient: login, quantity: 100 } });
+      expect(quote.json()).toMatchObject({ recipient: login, amount: R(110) });
+      const order = await app.inject({ method: 'POST', url: '/api/orders', headers, payload: { variantId: v.id, method: 'UAH', recipient: login, quantity: 100 } });
+      expect(order.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
 });

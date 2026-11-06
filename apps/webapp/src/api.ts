@@ -78,6 +78,8 @@ export type RecipientKind = 'USERNAME' | 'PHONE' | 'STEAM';
 export const accessLabel: Record<Access, string> = { UNSPECIFIED: '', NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом', GIFT: 'Подарком' };
 /** +79001234567 → «+7 900 123-45-67», +380671234567 → «+380 67 123 45 67», остальные как есть */
 export function prettyPhone(e164: string) {
+  // Телефоны сервер хранит с «+». Логин Steam из одних цифр, похожий на номер, показываем как есть
+  if (!e164.startsWith('+')) return e164;
   const d = e164.replace(/^\+/, '');
   if (/^7\d{10}$/.test(d)) return `+7 ${d.slice(1, 4)} ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
   if (/^380\d{9}$/.test(d)) return `+380 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8, 10)} ${d.slice(10)}`;

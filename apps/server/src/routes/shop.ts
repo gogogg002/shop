@@ -111,7 +111,7 @@ export async function shopRoutes(app: FastifyInstance) {
       wholesale: p.wholesale && Boolean(s.supportUsername),
       siblings: siblings.length > 1 ? siblings : [],
       variants: p.variants.map((v) => ({
-        id: v.id, title: v.title, price: v.price, oldPrice: v.oldPrice, inStock: stock ? (stock[v.id] ?? 0) > 0 : true,
+        id: v.id, title: v.title, price: v.price, oldPrice: v.oldPrice, inStock: stock && !v.perUnit ? (stock[v.id] ?? 0) > 0 : true,
         perUnit: v.perUnit, unit: v.unit, minQty: v.minQty, maxQty: v.maxQty,
       })),
       rating: await ratingSummary({ productId: { in: groupIds } }),
@@ -142,7 +142,7 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   const quoteBody = z.object({
-    variantId: bodyId, method: z.enum(METHODS), promoCode: z.string().max(40).optional(), recipient: z.string().max(40).optional(),
+    variantId: bodyId, method: z.enum(METHODS), promoCode: z.string().max(40).optional(), recipient: z.string().max(64).optional(),
     quantity: z.coerce.number().int().optional(),
   });
   app.post('/api/orders/quote', async (req) => {
@@ -170,7 +170,7 @@ export async function shopRoutes(app: FastifyInstance) {
   const createBody = z.object({
     variantId: bodyId,
     method: z.enum(METHODS),
-    recipient: z.string().max(40).optional(),
+    recipient: z.string().max(64).optional(), // логин Steam бывает до 64 символов
     promoCode: z.string().max(40).optional(),
     quantity: z.coerce.number().int().optional(),
   });

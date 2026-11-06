@@ -37,7 +37,7 @@ export async function adminRoutes(app: FastifyInstance) {
       SELECT v.id AS "variantId", p.title || ' · ' || v.title AS title, COUNT(c.id) AS left
       FROM "Variant" v JOIN "Product" p ON p.id = v."productId"
       LEFT JOIN "Code" c ON c."variantId" = v.id AND c."orderId" IS NULL
-      WHERE p."deliveryType" = 'CODES' AND p."isActive" GROUP BY v.id, p.title, v.title HAVING COUNT(c.id) < 5`;
+      WHERE p."deliveryType" = 'CODES' AND p."isActive" AND v."isActive" AND NOT v."perUnit" GROUP BY v.id, p.title, v.title HAVING COUNT(c.id) < 5`;
     return {
       revenue, profit, orders: today.length, queue, hourly,
       lowStock: lowStock.map((r) => ({ ...r, left: Number(r.left) })),
@@ -173,6 +173,9 @@ export async function adminRoutes(app: FastifyInstance) {
   /** Загрузка кодов: по одному в строке */
   app.post('/api/admin/variants/:id/codes', async (req) => {
     const { codes } = z.object({ codes: z.string() }).parse(req.body);
+    // Код на фиксированную сумму к варианту со своим количеством выдался бы на любую сумму
+    const variant = await prisma.variant.findUnique({ where: { id: idParam(req) } });
+    if (variant?.perUnit) throw new ShopError('per_unit_codes', 'К варианту со своим количеством коды не загружаются');
     const values = [...new Set(codes.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
     const r = await prisma.code.createMany({ data: values.map((value) => ({ value, variantId: idParam(req) })) });
     return { added: r.count };

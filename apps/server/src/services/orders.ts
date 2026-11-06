@@ -77,7 +77,8 @@ export function manualInstructions(order: { id: number; method: PaymentMethod; a
   }
   return {
     method: 'SBP',
-    amount: `${(order.amount / 100).toFixed(0)} ₽`,
+    // С копейками, если они есть: 51 звезда стоит 71,40 ₽, и перевести надо ровно столько
+    amount: `${order.amount % 100 ? (order.amount / 100).toFixed(2).replace('.', ',') : order.amount / 100} ₽`,
     requisites: [
       { label: 'Телефон', value: s.sbp.phone },
       { label: 'Получатель', value: s.sbp.holder },
@@ -121,7 +122,8 @@ export async function createOrder(input: {
   if (input.method === 'UAH' && !s.uah.card) throw new ShopError('method_unavailable', 'Оплата гривнами ещё не настроена');
   if (input.method === 'SBP' && !s.sbp.phone) throw new ShopError('method_unavailable', 'Оплата по СБП ещё не настроена');
 
-  if (variant.product.deliveryType === 'CODES') {
+  // У варианта со своим количеством код один на любую сумму не годится: такой заказ выдают вручную
+  if (variant.product.deliveryType === 'CODES' && !variant.perUnit) {
     const left = await prisma.code.count({ where: { variantId: variant.id, orderId: null } });
     if (left === 0) throw new ShopError('out_of_stock', 'Коды закончились, загляните позже');
   }
@@ -211,7 +213,7 @@ export async function markPaid(orderId: number) {
   if (changed.count === 0) return loadOrder(orderId);
 
   const order = (await loadOrder(orderId))!;
-  if (order.variant.product.deliveryType === 'CODES') {
+  if (order.variant.product.deliveryType === 'CODES' && !order.variant.perUnit) {
     const delivered = await deliverCode(orderId);
     if (delivered) return delivered;
   }

@@ -52,7 +52,9 @@ export function Product({ id }: { id: number }) {
   const save = v?.oldPrice && v.oldPrice > v.price ? Math.round((1 - v.price / v.oldPrice) * 100) : 0;
   // Своё количество (звёзды, рубли Steam): цена = количество × цена за единицу
   const qty = Number(qtyRaw.replace(/\s/g, ''));
-  const qtyOk = !v?.perUnit || (qtyRaw.trim() !== '' && Number.isInteger(qty) && qty >= v.minQty && qty <= v.maxQty);
+  // «500,00» или «250.5» не склеиваем в 50000 и 2505: просим целое число
+  const qtyFraction = /[.,]/.test(qtyRaw);
+  const qtyOk = !v?.perUnit || (/^[\d\s]+$/.test(qtyRaw) && Number.isInteger(qty) && qty >= v.minQty && qty <= v.maxQty);
   const total = v ? (v.perUnit ? (qtyOk ? v.price * qty : 0) : v.price) : 0;
   const isStars = v?.unit === 'Stars';
   const perUnitText = v?.perUnit ? `${(v.price / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽ за ${isStars ? 'звезду' : '1 ₽'}` : '';
@@ -106,7 +108,7 @@ export function Product({ id }: { id: number }) {
       {v?.perUnit && !bulk && (
         <label className="field">
           <span>{isStars ? 'Сколько звёзд' : 'Сумма пополнения, ₽'} · от {v.minQty.toLocaleString('ru-RU')} до {v.maxQty.toLocaleString('ru-RU')}</span>
-          <input value={qtyRaw} onChange={(e) => setQtyRaw(e.target.value.replace(/[^\d\s]/g, ''))}
+          <input value={qtyRaw} onChange={(e) => setQtyRaw(e.target.value.replace(/[^\d\s.,]/g, ''))}
             placeholder={isStars ? '500' : '1000'} inputMode="numeric" aria-label={isStars ? 'Количество звёзд' : 'Сумма пополнения'} />
         </label>
       )}
@@ -181,7 +183,7 @@ export function Product({ id }: { id: number }) {
         ) : (
           <button className="btn block" disabled={!v || !recipientOk || !qtyOk}
             onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}${v!.perUnit ? `&q=${qty}` : ''}`)}>
-            {!qtyOk ? (isStars ? 'Укажите количество звёзд' : 'Укажите сумму')
+            {!qtyOk ? (qtyFraction ? (isStars ? 'Только целое число звёзд' : 'Сумма целым числом, без копеек') : isStars ? 'Укажите количество звёзд' : 'Укажите сумму')
               : p.needsRecipient && !recipientOk ? spec.hint
               : <span>Оформить <span className="dot">·</span> {v ? rub(total) : ''}</span>}
           </button>

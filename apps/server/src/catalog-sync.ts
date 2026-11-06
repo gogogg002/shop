@@ -54,12 +54,16 @@ export async function noLoginByCard(log: (m: string) => void = () => {}) {
 
 /** Фиксированные варианты прячет (с заказами) или удаляет и добавляет вариант со своим количеством */
 async function toPerUnit(productId: number, v: typeof starsPerUnit, log: (m: string) => void, name: string) {
-  if (await prisma.variant.findFirst({ where: { productId, perUnit: true, isActive: true } })) {
+  // Выключенный админом вариант тоже считается: повторный запуск не вернёт его в продажу по цене из демо
+  if (await prisma.variant.findFirst({ where: { productId, perUnit: true } })) {
     log(`${name}: своё количество уже есть, не трогаю`);
     return false;
   }
   for (const old of await prisma.variant.findMany({ where: { productId, isActive: true } })) {
-    if (await prisma.order.count({ where: { variantId: old.id } })) await prisma.variant.update({ where: { id: old.id }, data: { isActive: false } });
+    // Удаление варианта стёрло бы и его коды: вариант с заказами или кодами только выключаем
+    const unsold = await prisma.code.count({ where: { variantId: old.id, orderId: null } });
+    if (unsold) log(`${name} · ${old.title}: выключен, непроданных кодов ${unsold}, они остались в базе`);
+    if (unsold || (await prisma.order.count({ where: { variantId: old.id } }))) await prisma.variant.update({ where: { id: old.id }, data: { isActive: false } });
     else await prisma.variant.delete({ where: { id: old.id } });
   }
   await prisma.variant.create({ data: { productId, ...v, perUnit: true, sort: 0 } });

@@ -6,7 +6,11 @@ export interface AdminProduct {
   deliveryType: 'MANUAL' | 'CODES'; needsRecipient: boolean; recipientKind: RecipientKind; access: Access; wholesale: boolean;
   isActive: boolean; isHit: boolean; sort: number; sales30d: number;
   category: { id: number; title: string };
-  variants: { id: number; title: string; price: number; oldPrice: number | null; cost: number; isActive: boolean; sort: number; codesLeft: number }[];
+  variants: {
+    id: number; title: string; price: number; oldPrice: number | null; cost: number; isActive: boolean; sort: number; codesLeft: number;
+    /** своё количество: цена и закупка за единицу, покупатель вводит minQty..maxQty */
+    perUnit: boolean; unit: string; minQty: number; maxQty: number;
+  }[];
 }
 
 export function Products() {
