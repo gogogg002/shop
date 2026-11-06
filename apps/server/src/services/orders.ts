@@ -1,4 +1,4 @@
-import type { PaymentMethod, Prisma, RecipientKind } from '@prisma/client';
+import type { OrderStatus, PaymentMethod, Prisma, RecipientKind } from '@prisma/client';
 import { prisma } from '../db.js';
 import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
@@ -228,9 +228,12 @@ export async function confirmManual(orderId: number) {
   // Кнопка «Подтвердить» есть у каждого админа. Повторное подтверждение оплаченного заказа ничего не меняет
   // (двойное нажатие), а отклонённый или отменённый заказ подтвердить нельзя: админ должен узнать об этом,
   // а не получить «Оплата подтверждена»
-  if (order.status === 'REJECTED' || order.status === 'CANCELLED' || order.status === 'REFUNDED')
-    throw new ShopError('bad_state', `Заказ уже обработан: ${STATUS_WORD[order.status]}`);
-  return markPaid(orderId);
+  const closed = (status: OrderStatus) => status === 'REJECTED' || status === 'CANCELLED' || status === 'REFUNDED';
+  if (closed(order.status)) throw new ShopError('bad_state', `Заказ уже обработан: ${STATUS_WORD[order.status]}`);
+  const after = await markPaid(orderId);
+  // Другой админ отклонил заказ или покупатель отменил его между проверкой выше и оплатой
+  if (after && closed(after.status)) throw new ShopError('bad_state', `Заказ уже обработан: ${STATUS_WORD[after.status]}`);
+  return after;
 }
 
 export async function rejectManual(orderId: number, reason: string) {

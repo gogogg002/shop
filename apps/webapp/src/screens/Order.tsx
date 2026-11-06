@@ -130,7 +130,7 @@ export function Order({ id }: { id: number }) {
                 <Icon name="img" size={20} />{photo ? photo.name : 'Приложить скриншот перевода'}
               </button>
               <button className="btn block" disabled={busy || !photo} onClick={sendProof}>{busy ? 'Отправляем…' : 'Я оплатил'}</button>
-              {o.status === 'PENDING_PAYMENT' && <button className="btn ghost block sm" onClick={cancel}>Отменить заказ</button>}
+              {o.status === 'PENDING_PAYMENT' && <button className="btn ghost block sm" disabled={busy} onClick={cancel}>Отменить заказ</button>}
             </>
           )}
         </div>

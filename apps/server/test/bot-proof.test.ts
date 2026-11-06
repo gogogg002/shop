@@ -12,6 +12,10 @@ const sendPhoto = vi.spyOn(Api.prototype, 'sendPhoto');
 const sendDocument = vi.spyOn(Api.prototype, 'sendDocument');
 const sendMessage = vi.spyOn(Api.prototype, 'sendMessage');
 const telegramError = () => Promise.reject(new Error('Bad Request: PHOTO_INVALID_DIMENSIONS'));
+/** Как Telegram разбирает parse_mode HTML: «<», который не открывает поддерживаемый тег, — ошибка 400 */
+const strictHtml = (text: string, other?: { parse_mode?: string }) => {
+  if (other?.parse_mode === 'HTML' && /<(?!\/?b>)/.test(text)) throw new Error("Bad Request: can't parse entities: Unsupported start tag");
+};
 
 const BUYER = '2400';
 const ADMIN = '1000'; // единственный админ в ADMIN_IDS тестов
@@ -110,6 +114,60 @@ describe('чек админам через бота', () => {
     expect(seen).toBe('PENDING_PAYMENT');
     release();
     expect((await r).json().status).toBe('AWAITING_CONFIRMATION');
+  });
+
+  it('«<» в названии товара: карточка экранирована и доходит до админа', async () => {
+    const captions: string[] = [];
+    sendPhoto.mockImplementation((async (_chat: unknown, _file: unknown, other?: { caption?: string; parse_mode?: string }) => {
+      strictHtml(other?.caption ?? '', other);
+      captions.push(other?.caption ?? '');
+      return { photo: [{ file_id: 'lt' }] };
+    }) as never);
+    const p = await prisma.product.create({
+      data: { categoryId: (await prisma.category.findFirstOrThrow({ where: { slug: 'bot-proof' } })).id, title: 'Stars <100 & больше>',
+        needsRecipient: false, variants: { create: [{ title: '50 <шт>', price: 5_000 }] } },
+      include: { variants: true },
+    });
+    const id = (await buyer('POST', '/api/orders', { variantId: p.variants[0].id, method: 'UAH' })).json().id as number;
+    expect((await proofWithPhoto(id)).json().status).toBe('AWAITING_CONFIRMATION');
+    expect(captions[0]).toContain('Stars &lt;100 &amp; больше&gt; · 50 &lt;шт&gt;');
+  });
+
+  it('разметку Telegram не разобрал: чек уходит без разметки, а не теряется', async () => {
+    const sent: { caption?: string; parse_mode?: string }[] = [];
+    const strict = (async (_chat: unknown, _file: unknown, other?: { caption?: string; parse_mode?: string }) => {
+      if (other?.parse_mode === 'HTML') throw new Error("Bad Request: can't parse entities: Unsupported start tag");
+      sent.push(other ?? {});
+      return { photo: [{ file_id: 'plain' }] };
+    }) as never;
+    sendPhoto.mockImplementation(strict);
+    sendDocument.mockImplementation(strict);
+    const id = await newOrder();
+    expect((await proofWithPhoto(id)).json().status).toBe('AWAITING_CONFIRMATION');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].parse_mode).toBeUndefined();
+    expect(sent[0].caption).toContain(`Заказ №${id}`);
+    expect(sent[0].caption).not.toContain('<b>');
+  });
+
+  it('админ отклонил между проверкой и оплатой: «Подтвердить» не врёт, что оплата прошла', async () => {
+    sendPhoto.mockResolvedValue({ photo: [{ file_id: 'x' }] } as never);
+    const id = await newOrder();
+    await proofWithPhoto(id);
+    // Отклонение «влезает» ровно между проверкой статуса в confirmManual и переводом в «оплачен»
+    const original = prisma.order.updateMany;
+    prisma.order.updateMany = (async (args: Parameters<typeof original>[0]) => {
+      prisma.order.updateMany = original;
+      await prisma.order.update({ where: { id }, data: { status: 'REJECTED' } });
+      return original(args);
+    }) as typeof original;
+    try {
+      const confirm = await app.inject({ method: 'POST', url: `/api/admin/orders/${id}/confirm`, payload: {}, headers: { 'x-dev-user': ADMIN } });
+      expect([confirm.statusCode, confirm.json().message]).toEqual([400, 'Заказ уже обработан: оплата отклонена']);
+    } finally {
+      prisma.order.updateMany = original;
+    }
+    expect((await prisma.order.findUniqueOrThrow({ where: { id } })).status).toBe('REJECTED');
   });
 
   it('второй админ жмёт «Подтвердить» после «Отклонить»: бот честно говорит, что заказ уже обработан', async () => {
