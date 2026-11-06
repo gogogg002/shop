@@ -38,11 +38,11 @@ export function Reviews({ productId }: { productId: number | null }) {
           <div className="disp" style={{ fontSize: 44, lineHeight: 1 }}>{ratingText(data.summary.avg)}</div>
           <div>
             <Stars value={data.summary.avg} size={18} />
-            <div className="muted small" style={{ marginTop: 4 }}>{reviewsWord(data.summary.count)} от покупателей</div>
+            <div className="muted small" style={{ marginTop: 4 }}>{reviewsWord(data.summary.count)}</div>
           </div>
         </div>
       ) : (
-        <div className="empty">Отзывов пока нет. Они появляются после выполненных заказов.</div>
+        <div className="empty">Отзывов пока нет</div>
       )}
       {items.map((r) => <ReviewCard key={r.id} r={r} showProduct={!productId} />)}
       {cursor && <button className="btn ghost block" disabled={busy} onClick={loadMore}>{busy ? 'Загружаем…' : 'Показать ещё'}</button>}

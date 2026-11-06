@@ -67,7 +67,7 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
       {queueOnly && s && (
         <>
           <div className="card pad">
-            <div className="between"><span className="cap">Выручка</span><span className="muted small">прибыль {rub(s.profit)}</span></div>
+            <div className="between"><span className="cap">Выручка</span></div>
             <div className="disp" style={{ fontSize: 40, marginTop: 6 }}>{rub(s.revenue)}</div>
             <svg viewBox="0 0 340 70" width="100%" height="70" style={{ marginTop: 12, display: 'block' }} role="img" aria-label="Выручка по часам">
               {s.hourly.map((v, i) => {

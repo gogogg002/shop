@@ -69,7 +69,7 @@ export function AdminReviews() {
       </div>
       {error && <div className="empty">{error}</div>}
       {!data && !error && <div className="skeleton" style={{ height: 240 }} />}
-      {data && !data.items.length && <div className="empty">Здесь пока пусто. Отзывы приходят после выполненных заказов, бот пришлёт уведомление.</div>}
+      {data && !data.items.length && <div className="empty">Отзывов нет</div>}
 
       {data?.items.map((r) => {
         const buyer = r.user.username ? `@${r.user.username}` : r.user.firstName ?? r.user.tgId;

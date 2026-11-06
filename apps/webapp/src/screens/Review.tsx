@@ -66,7 +66,7 @@ export function Review({ orderId, preset }: { orderId: number; preset: number })
         <div className="glow" />
         <span className="done-mark" aria-hidden="true"><Icon name="check" size={34} /></span>
         <h1 className="disp h1">{o.review ? 'Отзыв обновлён' : 'Спасибо за отзыв!'}</h1>
-        <p className="muted" style={{ lineHeight: 1.45 }}>{o.review ? 'Сохранили новую оценку.' : 'Он появится на витрине и поможет другим выбрать.'}</p>
+        {!o.review && <p className="muted" style={{ lineHeight: 1.45 }}>Он появится на витрине.</p>}
         <button className="btn block" onClick={() => go('/')}>В каталог</button>
         <button className="btn ghost block sm" onClick={back}>К заказу</button>
       </div>
@@ -80,8 +80,8 @@ export function Review({ orderId, preset }: { orderId: number; preset: number })
       <header className="appbar"><Brand /></header>
 
       <section style={{ padding: '30px 4px 0', minHeight: 132 }}>
-        <div className="cap lit"><Icon name="check" size={13} />{o.review ? 'Ваш отзыв' : 'Заказ выдан'}</div>
-        <h1 className="disp" style={{ fontSize: 28, marginTop: 12, maxWidth: 240 }}>Заказ №{o.id} выполнен</h1>
+        <div className="cap lit"><Icon name="check" size={13} />{o.review ? 'Ваш отзыв' : 'Выдан'}</div>
+        <h1 className="disp" style={{ fontSize: 28, marginTop: 12, maxWidth: 240 }}>Заказ №{o.id}</h1>
       </section>
 
       <div className="card order-line" style={{ marginTop: 34 }}>
@@ -115,7 +115,7 @@ export function Review({ orderId, preset }: { orderId: number; preset: number })
         <span>{low ? 'Что пошло не так? (необязательно)' : 'Что понравилось? (необязательно)'}</span>
         <textarea rows={4} maxLength={TEXT_MAX - TAGS_ROOM} value={text} onChange={(e) => setText(e.target.value)} placeholder="Пришло быстро, всё чётко" />
       </label>
-      {low && <p className="muted small" style={{ lineHeight: 1.45, margin: '10px 4px 0' }}>Если с заказом проблема, напишите в чат заказа, поможем.</p>}
+      {low && <p className="muted small" style={{ lineHeight: 1.45, margin: '10px 4px 0' }}>Проблема с заказом? Напишите в чат заказа.</p>}
 
       <div className="sticky-cta col" style={{ gap: 2 }}>
         <button className="btn block" disabled={!rating || busy} onClick={send}>

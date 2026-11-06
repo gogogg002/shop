@@ -74,7 +74,7 @@ export async function submitReview(orderId: number, userId: number, input: { rat
     if (fresh.editCount >= reviewPolicy.maxEdits)
       throw new ShopError('edit_limit', `Отзыв можно изменить не больше ${reviewPolicy.maxEdits} раз`);
     const wait = Math.max(1, Math.ceil((fresh.activityAt.getTime() + reviewPolicy.editCooldownMs - now.getTime()) / 1000));
-    throw new ShopError('too_fast', `Отзыв только что сохранён. Изменить его можно через ${wait} сек.`, 429);
+    throw new ShopError('too_fast', `Изменить отзыв можно через ${wait} сек.`, 429);
   }
 
   const review = await prisma.review.findUniqueOrThrow({ where: { orderId } });

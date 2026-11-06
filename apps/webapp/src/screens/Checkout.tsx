@@ -42,7 +42,7 @@ export function Checkout({ variantId, recipient, quantity }: { variantId: number
       go(`/orders/${o.id}`);
     } catch (e) {
       // Ответ мог потеряться, когда заказ уже создан: второе нажатие создало бы ещё один
-      toast(isNetwork(e) ? 'Связь оборвалась, заказ мог уже создаться. Проверьте «Заказы», прежде чем оплачивать ещё раз' : (e as Error).message, true);
+      toast(isNetwork(e) ? 'Связь оборвалась, заказ мог уже создаться. Сначала проверьте «Заказы»' : (e as Error).message, true);
       setBusy(false);
     }
   }

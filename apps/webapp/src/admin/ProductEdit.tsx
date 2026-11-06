@@ -70,7 +70,7 @@ export function ProductEdit({ id }: { id: number | null }) {
     if (bad) return toast('У каждого варианта нужны название и цена', true);
     const qtyInt = (s?: string) => (/^\d+$/.test((s ?? '').replace(/\s/g, '')) ? Number((s ?? '').replace(/\s/g, '')) : 0);
     const badQty = vars.find((v) => v.perUnit && !(qtyInt(v.minQty) >= 1 && qtyInt(v.maxQty) >= qtyInt(v.minQty) && qtyInt(v.maxQty) <= 1_000_000));
-    if (badQty) return toast('У варианта со своим количеством укажите пределы: от 1, «до» не меньше «от» и не больше 1 000 000', true);
+    if (badQty) return toast('Пределы количества: от 1 до 1 000 000, «до» не меньше «от»', true);
     setBusy(true);
     try {
       const saved = id
@@ -147,7 +147,7 @@ export function ProductEdit({ id }: { id: number | null }) {
 
       <label className="field"><span>Название</span><input value={p.title} onChange={(e) => set('title', e.target.value)} placeholder="Telegram Premium" /></label>
       <label className="field"><span>Подпись в каталоге</span><input value={p.subtitle} onChange={(e) => set('subtitle', e.target.value)} placeholder="Подарком на аккаунт" /></label>
-      <label className="field"><span>Как это работает: каждый шаг с новой строки, коротко</span><textarea rows={3} value={p.description} onChange={(e) => set('description', e.target.value)} /></label>
+      <label className="field"><span>Как это работает: по шагу в строке</span><textarea rows={3} value={p.description} onChange={(e) => set('description', e.target.value)} /></label>
 
       <div className="row" style={{ gap: 8 }}>
         <label className="field sp"><span>Категория</span>
@@ -176,7 +176,7 @@ export function ProductEdit({ id }: { id: number | null }) {
         ))}
       </div>
       <p className="muted small" style={{ lineHeight: 1.45 }}>
-        Товары с одинаковым названием в одной категории и разным режимом («Без входа», «Со входом», «Подарком») покупатель видит одной карточкой с вкладками.
+        Одинаковое название в одной категории и разный режим — на витрине одна карточка с вкладками.
       </p>
 
       <div className="cap">Что спросить у покупателя</div>
@@ -204,7 +204,7 @@ export function ProductEdit({ id }: { id: number | null }) {
               {v.perUnit ? (
                 <>
                   <div className="muted small" style={{ lineHeight: 1.45 }}>
-                    Покупатель сам вводит количество{v.unit ? ` (${v.unit})` : ''}. Цена и закупка здесь за 1 единицу, итог = количество × цена.
+                    Покупатель сам вводит количество{v.unit ? ` (${v.unit})` : ''}.
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <label className="field" style={{ padding: '6px 12px' }}><span>Цена за 1</span><input inputMode="decimal" value={v.price} onChange={(e) => setVar(i, { price: e.target.value })} /></label>
@@ -228,7 +228,7 @@ export function ProductEdit({ id }: { id: number | null }) {
                   <span className="small" style={{ color: margin >= 20 ? 'var(--ok)' : margin > 0 ? 'var(--warn)' : 'var(--bad)', fontWeight: 600 }}>маржа {margin}%</span>
                 </div>
               )}
-              {p.deliveryType === 'CODES' && v.perUnit && <div className="muted small">К своему количеству коды не загружаются: такие заказы выдаются вручную.</div>}
+              {p.deliveryType === 'CODES' && v.perUnit && <div className="muted small">Коды не используются: выдача вручную.</div>}
               {p.deliveryType === 'CODES' && v.id && !v.perUnit && (
                 <label className="field" style={{ padding: '6px 12px' }}>
                   <span>Добавить коды, по одному в строке · сейчас в наличии {v.codesLeft ?? 0}</span>

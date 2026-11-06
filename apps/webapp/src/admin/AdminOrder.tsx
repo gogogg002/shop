@@ -79,7 +79,7 @@ export function AdminOrder({ id }: { id: number }) {
           <div className="cap">Выдача</div>
           {o.deliveredText && (
             <div className="muted small" style={{ lineHeight: 1.45 }}>
-              Клиенту уже выдано: <b className="mono" style={{ color: 'var(--t)', wordBreak: 'break-all' }}>{o.deliveredText}</b>. Заказ в работе, пока вы не нажмёте «Завершить».
+              Уже выдано: <b className="mono" style={{ color: 'var(--t)', wordBreak: 'break-all' }}>{o.deliveredText}</b>
             </div>
           )}
           <label className="field"><span>Что выдать клиенту: карта, код, ссылка</span><textarea rows={2} value={deliverText} onChange={(e) => setDeliverText(e.target.value)} placeholder="Карта 4441 1111 2222 3333, до 12/28" /></label>
@@ -87,7 +87,7 @@ export function AdminOrder({ id }: { id: number }) {
             {o.deliveredText ? 'Выдать заново, не завершая' : 'Выдать, не завершая'}
           </button>
           <button className="btn block" disabled={busy} onClick={() => act('deliver', { text: deliverText.trim() || undefined }, 'Заказ завершён')}>Завершить заказ</button>
-          <div className="muted small" style={{ lineHeight: 1.45 }}>После «Завершить» клиенту придёт пуш, и он сможет оставить отзыв.</div>
+          <div className="muted small" style={{ lineHeight: 1.45 }}>После завершения клиенту придёт просьба об отзыве.</div>
         </div>
       )}
 
@@ -107,7 +107,7 @@ export function AdminOrder({ id }: { id: number }) {
             // Прежде чем предлагать повтор, смотрим, дошло ли оно
             const fresh = await api<AO>(`/api/admin/orders/${id}`).catch(() => null);
             if (fresh) setData(fresh);
-            if (!fresh) throw new Error('Связь оборвалась. Если сообщение появится в чате, второй раз его не отправляйте');
+            if (!fresh) throw new Error('Связь оборвалась, сообщение могло дойти. Подождите минуту');
             if (!arrived(fresh.messages, known, text, true)) throw new Error('Связь оборвалась, сообщение не дошло. Отправьте ещё раз');
           } finally {
             // Обновление, ушедшее до сообщения, могло вернуться позже и стереть его: новый запрос отменяет старый

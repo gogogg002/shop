@@ -105,7 +105,7 @@ export async function createOrder(input: {
     throw new ShopError(
       'bad_recipient',
       variant.product.recipientKind === 'PHONE'
-        ? 'Укажите номер телефона аккаунта с кодом страны, например +7 900 123-45-67'
+        ? 'Укажите номер телефона с кодом страны, например +7 900 123-45-67'
         : variant.product.recipientKind === 'STEAM'
           ? 'Укажите логин Steam (не никнейм), например gaben'
           : 'Укажите username получателя, например @durov',

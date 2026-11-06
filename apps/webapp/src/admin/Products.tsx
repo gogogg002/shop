@@ -35,11 +35,11 @@ export function Products() {
         <a href="#/admin/products/new" className="btn icon" style={{ width: 46, height: 46, borderRadius: 23 }} aria-label="Добавить товар"><Icon name="plus" /></a>
       </div>
       {error && <div className="empty">{error}</div>}
-      {data && !data.length && <div className="empty">Товаров нет. Нажмите «+», чтобы добавить первый.</div>}
+      {data && !data.length && <div className="empty">Товаров нет</div>}
 
       {data?.filter((p) => p.deliveryType === 'CODES' && p.isActive).flatMap((p) => p.variants.filter((v) => v.isActive && !v.perUnit && v.codesLeft < 5).map((v) => (
         <a key={v.id} href={`#/admin/products/${p.id}`} className="row" style={{ background: 'rgba(255,181,71,.08)', border: '1px solid rgba(255,181,71,.25)', borderRadius: 16, padding: '12px 14px' }}>
-          <b style={{ color: 'var(--warn)' }}>!</b><span className="sp small"><b>{p.title} · {v.title}:</b> осталось {v.codesLeft} кодов</span><span style={{ color: 'var(--warn)', fontWeight: 600, fontSize: 13.5 }}>Загрузить</span>
+          <b style={{ color: 'var(--warn)' }}>!</b><span className="sp small"><b>{p.title} · {v.title}:</b> осталось кодов {v.codesLeft}</span><span style={{ color: 'var(--warn)', fontWeight: 600, fontSize: 13.5 }}>Загрузить</span>
         </a>
       )))}
 

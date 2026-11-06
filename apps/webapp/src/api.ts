@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-const NETWORK_TEXT = 'Нет связи с магазином. Проверьте интернет и попробуйте ещё раз';
+const NETWORK_TEXT = 'Нет связи с магазином. Проверьте интернет';
 /** Ответ не дошёл: запрос мог и выполниться на сервере */
 export const isNetwork = (e: unknown) => e instanceof ApiError && e.code === 'network';
 

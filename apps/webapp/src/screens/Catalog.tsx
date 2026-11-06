@@ -38,7 +38,7 @@ export function Catalog({ category }: { category: string | null }) {
 
       <section style={{ padding: '18px 4px 0', minHeight: 196 }} aria-label="Витрина">
         <h1 className="hero-title">Кристально<br />просто</h1>
-        <p className="hero-sub" style={{ marginTop: 34 }}>Telegram, Discord, Steam и нейросети. Оплата СБП, криптой или гривнами.</p>
+        <p className="hero-sub" style={{ marginTop: 34 }}>Оплата СБП, криптой или гривнами.</p>
       </section>
 
       <label className="search" style={{ marginTop: 16 }}>
@@ -58,7 +58,7 @@ export function Catalog({ category }: { category: string | null }) {
 
       {error && <div className="empty">{error}</div>}
       {!data && !error && <div className="svc-grid" style={{ marginTop: 16 }}>{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 106 }} />)}</div>}
-      {data && !products.length && <div className="empty">Ничего не нашли. Попробуйте другое название.</div>}
+      {data && !products.length && <div className="empty">Ничего не нашли</div>}
 
       {products.length > 0 && (
         <section className="svc-grid" style={{ marginTop: 16 }} aria-label="Сервисы">

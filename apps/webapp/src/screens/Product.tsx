@@ -130,7 +130,7 @@ export function Product({ id }: { id: number }) {
         <div className="card pad col" style={{ gap: 8 }}>
           <div className="disp" style={{ fontSize: 17 }}>Оптом дешевле</div>
           <p className="muted" style={{ lineHeight: 1.45 }}>
-            От 10 штук. Напишите {support && <b style={{ color: 'var(--t)' }}>@{support}</b>} товар и количество, пришлём цену.
+            От 10 штук. Напишите товар и количество, пришлём цену.
           </p>
         </div>
       )}
