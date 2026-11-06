@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { Component, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, tg, type Me } from './api';
 import { Icon, useLoad } from './ui/kit';
 import { Catalog } from './screens/Catalog';
@@ -74,6 +74,29 @@ function parentOf(path: string) {
   return '/';
 }
 
+/**
+ * Ошибка при отрисовке экрана не гасит весь мини-апп: React без такой обёртки снимает всё дерево, и экран
+ * остаётся чёрным до перезапуска. Переход на другой экран сбрасывает ошибку
+ */
+class Crash extends Component<{ path: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidUpdate(prev: { path: string }) {
+    if (prev.path !== this.props.path && this.state.failed) this.setState({ failed: false });
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="page">
+        <div className="empty">Экран не открылся из-за ошибки</div>
+        <button className="btn block" onClick={() => location.reload()}>Обновить</button>
+      </div>
+    );
+  }
+}
+
 const MeCtx = createContext<Me | null>(null);
 export const useMe = () => useContext(MeCtx);
 
@@ -97,6 +120,12 @@ function Nav({ admin, path }: { admin: boolean; path: string }) {
 export function App() {
   const { path, query } = useHash();
   const me = useLoad(() => api<Me>('/api/me'));
+  // Без профиля мини-апп не работает: если на старте не было связи, пробуем снова, пока не получится
+  useEffect(() => {
+    if (!me.error) return;
+    const h = setInterval(me.reload, 5000);
+    return () => clearInterval(h);
+  }, [me.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     tg?.ready();
@@ -145,7 +174,7 @@ export function App() {
 
   return (
     <MeCtx.Provider value={me.data}>
-      {screen}
+      <Crash path={path}>{screen}</Crash>
       {showNav && <Nav admin={isAdminPath} path={path} />}
     </MeCtx.Provider>
   );

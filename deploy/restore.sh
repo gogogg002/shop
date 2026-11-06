@@ -69,7 +69,11 @@ start_app() {
 # началось, приложение не стартует на пустой или половине базы: восстановление запускают ещё раз
 on_exit() {
   [ "$finished" = 1 ] && return
-  trap '' INT HUP TERM
+  # Обработчик должен дойти до конца, что бы ни случилось с терминалом: после обрыва SSH или закрытого
+  # «| tee» запись сообщения падает с ошибкой, и при set -e на ней бы всё и кончилось, а приложение так и
+  # осталось бы выключенным
+  trap '' INT HUP TERM PIPE
+  set +e
   if [ "$restored" = 1 ]; then
     echo "База восстановлена из $file" >&2
     start_app
@@ -90,9 +94,11 @@ on_exit() {
   fi
 }
 trap on_exit EXIT
-trap 'exit 130' INT
-trap 'exit 129' HUP
-trap 'exit 143' TERM
+# Обрыв SSH присылает SIGHUP дважды с разницей в микросекунды: второй сигнал не должен ещё раз выполнить
+# exit уже внутри on_exit, поэтому первым делом обработчик сигнала их отключает
+trap 'trap "" INT HUP TERM; exit 130' INT
+trap 'trap "" INT HUP TERM; exit 129' HUP
+trap 'trap "" INT HUP TERM; exit 143' TERM
 
 docker compose stop app
 live=$(psql -At -F ' ' -c "SELECT sequencename, last_value FROM pg_sequences WHERE schemaname = 'public' AND last_value IS NOT NULL" 2>/dev/null) || { live=''; readable=0; }

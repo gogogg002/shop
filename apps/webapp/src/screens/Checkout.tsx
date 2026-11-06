@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, api, methodLabel, openPay, prettyPhone, rub, tg, type Glass, type Method, type RecipientKind } from '../api';
+import { ApiError, api, isNetwork, methodLabel, openPay, prettyPhone, rub, tg, type Glass, type Method, type RecipientKind } from '../api';
 import { Icon, Key, useToast } from '../ui/kit';
 import { go, useMe } from '../App';
 
@@ -41,7 +41,8 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
       if (o.payUrl) openPay(o.payUrl);
       go(`/orders/${o.id}`);
     } catch (e) {
-      toast((e as Error).message, true);
+      // Ответ мог потеряться, когда заказ уже создан: второе нажатие создало бы ещё один
+      toast(isNetwork(e) ? 'Связь оборвалась, заказ мог уже создаться. Проверьте «Заказы», прежде чем оплачивать ещё раз' : (e as Error).message, true);
       setBusy(false);
     }
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, apiBlobUrl, copy, itemTitle, methodLabel, prettyPhone, rub, statusLabel, type AdminOrder as AO } from '../api';
-import { Key, useLoad, useToast } from '../ui/kit';
-import { Chat } from '../ui/Chat';
+import { api, apiBlobUrl, copy, isNetwork, itemTitle, methodLabel, prettyPhone, rub, statusLabel, type AdminOrder as AO } from '../api';
+import { Key, Stale, useLoad, useToast } from '../ui/kit';
+import { arrived, Chat } from '../ui/Chat';
 
 export function AdminOrder({ id }: { id: number }) {
   const { data: o, error, reload, setData } = useLoad(() => api<AO>(`/api/admin/orders/${id}`), [id]);
@@ -20,8 +20,8 @@ export function AdminOrder({ id }: { id: number }) {
     return () => clearInterval(h);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <div className="page"><div className="empty">{error}</div></div>;
-  if (!o) return <div className="page"><div className="skeleton" style={{ height: 300 }} /></div>;
+  // Обновление не удалось, но заказ уже на экране: показываем его с пометкой, недописанный ответ в чате остаётся
+  if (!o) return <div className="page">{error ? <div className="empty">{error}</div> : <div className="skeleton" style={{ height: 300 }} />}</div>;
 
   async function act(path: string, body: object, ok: string) {
     setBusy(true);
@@ -43,6 +43,7 @@ export function AdminOrder({ id }: { id: number }) {
     <div className="page">
       <div className="glow" />
       <div className="between"><h1 className="disp h1">№{o.id}</h1><span className={`pill ${st.tone}`}>{st.text}</span></div>
+      {error && <Stale error={error} />}
 
       <div className="card pad col">
         <div className="row">
@@ -86,9 +87,23 @@ export function AdminOrder({ id }: { id: number }) {
         asAdmin
         messages={o.messages ?? []}
         onSend={async (text) => {
-          const m = await api<NonNullable<AO['messages']>[number]>(`/api/admin/orders/${id}/messages`, { body: { text } });
-          // К текущему заказу, а не к копии с момента отправки: та затёрла бы статус, пришедший за это время
-          setData((d) => d && (d.messages?.some((x) => x.id === m.id) ? d : { ...d, messages: [...(d.messages ?? []), m] }));
+          const known = new Set((o.messages ?? []).map((m) => m.id));
+          try {
+            const m = await api<NonNullable<AO['messages']>[number]>(`/api/admin/orders/${id}/messages`, { body: { text } });
+            // К текущему заказу, а не к копии с момента отправки: та затёрла бы статус, пришедший за это время
+            setData((d) => d && (d.messages?.some((x) => x.id === m.id) ? d : { ...d, messages: [...(d.messages ?? []), m] }));
+          } catch (e) {
+            if (!isNetwork(e)) throw e;
+            // Ответ мог потеряться, когда сообщение уже сохранено и ушло клиенту: повтор пришлёт его дважды.
+            // Прежде чем предлагать повтор, смотрим, дошло ли оно
+            const fresh = await api<AO>(`/api/admin/orders/${id}`).catch(() => null);
+            if (fresh) setData(fresh);
+            if (!fresh) throw new Error('Связь оборвалась. Если сообщение появится в чате, второй раз его не отправляйте');
+            if (!arrived(fresh.messages, known, text, true)) throw new Error('Связь оборвалась, сообщение не дошло. Отправьте ещё раз');
+          } finally {
+            // Обновление, ушедшее до сообщения, могло вернуться позже и стереть его: новый запрос отменяет старый
+            reload();
+          }
         }}
       />
     </div>

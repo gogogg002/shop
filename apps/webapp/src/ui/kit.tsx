@@ -105,6 +105,15 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   return { data, error, reload: () => setTick((x) => x + 1), setData };
 }
 
+/** Пометка над заказом, который не удалось обновить: на экране то, что успели загрузить раньше */
+export function Stale({ error }: { error: string }) {
+  return (
+    <div className="row" role="status" style={{ background: 'rgba(255,181,71,.1)', borderRadius: 14, padding: 12, color: 'var(--warn)', fontSize: 14, lineHeight: 1.45 }}>
+      Не удалось обновить: {error}
+    </div>
+  );
+}
+
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return <button type="button" role="switch" aria-checked={on} aria-label={label} className={`tog ${on ? 'on' : ''}`} onClick={() => onChange(!on)} />;
 }

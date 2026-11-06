@@ -3,6 +3,13 @@ import { Icon, useToast } from './kit';
 
 export interface ChatMsg { id: number; text: string; fromAdmin: boolean; createdAt: string }
 
+/**
+ * Ответ на отправку потерялся, а заказ перечитан: есть ли там это сообщение (новое, с нашей стороны, тот же
+ * текст). Если есть, оно дошло, и отправлять его ещё раз не нужно
+ */
+export const arrived = (messages: ChatMsg[] | undefined, known: Set<number>, text: string, fromAdmin: boolean) =>
+  (messages ?? []).some((m) => !known.has(m.id) && m.fromAdmin === fromAdmin && m.text === text);
+
 /** Чат по заказу. asAdmin — сообщения админа справа. */
 export function Chat({ messages, onSend, asAdmin, title }: {
   messages: ChatMsg[];
