@@ -21,6 +21,8 @@ export async function reconcilePayments(log: (m: string) => void = () => {}) {
         status: { in: ['PENDING_PAYMENT', 'CANCELLED'] },
       },
       select: { id: true, externalId: true },
+      // Свежие первыми: если заказов больше 200, без проверки остаются самые старые
+      orderBy: { id: 'desc' },
       take: 200,
     });
     if (!orders.length) continue;

@@ -64,4 +64,20 @@ describe('сверка оплат без вебхука', () => {
     await expect(reconcilePayments((m) => log.push(m))).resolves.toEqual([]);
     expect(log[0]).toMatch(/timeout/);
   });
+
+  it('xRocket: счёт, на который API ответил ошибкой, не мешает найти оплату остальных', async () => {
+    const { xrocket } = await import('../src/payments/xrocket.js');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const id = url.split('/').pop();
+      if (id === 'bad') return new Response(JSON.stringify({ success: false, message: 'Not found' }), { status: 404 });
+      return new Response(JSON.stringify({ success: true, data: { id, link: '', status: id === 'p1' ? 'paid' : 'active', payload: '1' } }));
+    }));
+    try {
+      expect([...(await xrocket.paidInvoices(['bad', 'p1', 'w1']))]).toEqual(['p1']);
+      // не ответил ни один: сверка узнаёт об ошибке и пишет её в лог
+      await expect(xrocket.paidInvoices(['bad'])).rejects.toThrow(/Not found/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
