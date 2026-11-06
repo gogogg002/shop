@@ -100,10 +100,11 @@ class Crash extends Component<{ path: string; children: ReactNode }, { failed: b
 const MeCtx = createContext<Me | null>(null);
 export const useMe = () => useContext(MeCtx);
 
-function Nav({ admin, path }: { admin: boolean; path: string }) {
+function Nav({ admin, isAdmin, path }: { admin: boolean; isAdmin: boolean; path: string }) {
+  // Админу вход в админку виден сразу, в нижней панели витрины; обратно в витрину — кнопка на сводке
   const items = admin
     ? [['/admin', 'chart', 'Сводка'], ['/admin/orders', 'list', 'Заказы'], ['/admin/products', 'box', 'Товары'], ['/admin/reviews', 'starO', 'Отзывы'], ['/admin/settings', 'gear', 'Настройки']]
-    : [['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы']];
+    : [['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы'], ...(isAdmin ? [['/admin', 'shield', 'Админка']] : [])];
   const active = (to: string) => (to === '/' || to === '/admin' ? path === to : path.startsWith(to));
   return (
     <nav className="nav" aria-label="Разделы">
@@ -175,7 +176,7 @@ export function App() {
   return (
     <MeCtx.Provider value={me.data}>
       <Crash path={path}>{screen}</Crash>
-      {showNav && <Nav admin={isAdminPath} path={path} />}
+      {showNav && <Nav admin={isAdminPath} isAdmin={me.data.isAdmin} path={path} />}
     </MeCtx.Provider>
   );
 }

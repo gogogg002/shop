@@ -61,7 +61,7 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
       <div className="glow" />
       <div className="between">
         <h1 className="disp" style={{ fontSize: 34 }}>{queueOnly ? 'Сегодня' : 'Заказы'}</h1>
-        <span className="pill a mono" style={{ letterSpacing: '.08em' }}>ADMIN</span>
+        <a href="#/" className="pill a">В магазин</a>
       </div>
 
       {queueOnly && s && (

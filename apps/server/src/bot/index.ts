@@ -35,10 +35,12 @@ export function startBot() {
     for (const id of admins) await fn(id).catch((e) => console.error('notify admin failed', id, e.message));
   };
 
-  bot.command('start', (ctx) =>
-    ctx.reply('Krynel: подписки, Stars и пополнения за пару минут. Открывайте магазин кнопкой ниже.', {
-      reply_markup: new InlineKeyboard().webApp('Открыть магазин', config.PUBLIC_URL),
-    }));
+  bot.command('start', (ctx) => {
+    const kb = new InlineKeyboard().webApp('Открыть магазин', config.PUBLIC_URL);
+    // Владельцу вход в админку сразу под приветствием, без отдельной команды /admin
+    if (isAdmin(BigInt(ctx.from!.id))) kb.row().webApp('Админка', webUrl('/admin'));
+    return ctx.reply('Krynel: подписки, Stars и пополнения за пару минут. Открывайте магазин кнопкой ниже.', { reply_markup: kb });
+  });
 
   bot.command('id', (ctx) => ctx.reply(`Ваш Telegram ID: <code>${ctx.from!.id}</code>`, { parse_mode: 'HTML' }));
 
