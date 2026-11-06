@@ -84,7 +84,7 @@ b, strong { font-weight: 650; }
 .sep { height: 1px; background: var(--line); }
 
 .btn { height: 56px; border-radius: 18px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  font: 600 16px/1 var(--display); letter-spacing: -0.03em; color: var(--on-a);
+  font: 600 15px/1.15 var(--display); letter-spacing: -0.03em; color: var(--on-a); text-align: center;
   background: var(--facet-lime); box-shadow: 0 14px 34px -14px rgba(198,249,78,.6), inset 0 1px 0 rgba(255,255,255,.55); }
 .btn:disabled { background: #1a1b20; color: var(--m2); box-shadow: inset 0 0 0 1px var(--line); }
 .btn.ghost:disabled { background: transparent; opacity: .5; }
@@ -185,8 +185,10 @@ b, strong { font-weight: 650; }
   background: linear-gradient(180deg, rgba(6,6,7,0), rgba(6,6,7,.9) 34%, #060607 64%); }
 
 /* варианты товара */
-.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.opt { position: relative; min-height: 62px; border-radius: 18px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
+.opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* название и цена в строку, а если не влезают (1000 Stars · 1 690 ₽), цена уходит под название */
+.opt { position: relative; min-height: 62px; border-radius: 18px; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; align-content: center;
+  justify-content: space-between; gap: 4px 8px; text-align: left; min-width: 0; }
 .opt-t { font: 600 17px/1 var(--display); letter-spacing: -0.035em; white-space: nowrap; }
 .opt-p { font-size: 14px; font-weight: 500; color: var(--m); white-space: nowrap; }
 .opt.on .opt-p { color: var(--a); font-weight: 600; }
