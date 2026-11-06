@@ -36,7 +36,7 @@ export function startBot() {
   };
 
   bot.command('start', (ctx) =>
-    ctx.reply('Krynel: подписки, Stars и пополнения за пару минут. Открывайте магазин кнопкой ниже.', {
+    ctx.reply('Krynel — Premium, Stars и пополнения за пару минут 👇', {
       // Админу первой кнопкой — админка
       reply_markup: isAdmin(BigInt(ctx.from!.id))
         ? new InlineKeyboard().webApp('⚙️ Админка', webUrl('/admin')).row().webApp('Открыть магазин', config.PUBLIC_URL)
@@ -109,7 +109,7 @@ export function startBot() {
       const kb = new InlineKeyboard()
         .webApp('⭐ Оставить отзыв', webUrl(`/orders/${o.id}/review`)).row()
         .webApp('Открыть заказ', webUrl(`/orders/${o.id}`));
-      await bot.api.sendMessage(Number(o.user.tgId), `${text}\n\nСпасибо за покупку! Оцените заказ, это займёт 10 секунд.`, {
+      await bot.api.sendMessage(Number(o.user.tgId), `${text}\n\nОцените заказ ⭐`, {
         reply_markup: kb,
       }).catch((e) => console.error('notify user failed', e.message));
     },

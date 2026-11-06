@@ -226,7 +226,7 @@ export async function markPaid(orderId: number) {
     if (delivered) return delivered;
   }
   await notifier().orderPaid(order);
-  await notifier().orderStatusToUser(order, `Заказ №${order.id} оплачен. Скоро выдадим, статус придёт сюда.`);
+  await notifier().orderStatusToUser(order, `💳 Заказ №${order.id} оплачен, скоро выдадим`);
   return order;
 }
 
@@ -291,7 +291,7 @@ export async function issue(orderId: number, text: string) {
   const order = (await loadOrder(orderId))!;
   await notifier().orderStatusToUser(
     order,
-    `📦 По заказу №${order.id} выдано:\n${clean}\n\nЗаказ ещё в работе. Когда всё будет готово, мы его завершим.`,
+    `📦 Заказ №${order.id}: выдано\n${clean}\n\nЗавершим, когда всё будет готово`,
   );
   return order;
 }

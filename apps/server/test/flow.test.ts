@@ -120,8 +120,7 @@ describe('ручная оплата гривнами', () => {
 
     const i = await api(ADMIN).post(`/api/admin/orders/${id}/issue`, { text: 'Карта 4441 1111 2222 3333' });
     expect(i.json()).toMatchObject({ status: 'PAID', deliveredText: 'Карта 4441 1111 2222 3333' });
-    expect(sent.some((m) => m.startsWith(`user:${id}:📦 По заказу №${id} выдано:
-Карта 4441`))).toBe(true);
+    expect(sent.some((m) => m.startsWith(`user:${id}:📦 Заказ №${id}: выдано\nКарта 4441`))).toBe(true);
     expect(sent.some((m) => m.startsWith(`delivered:${id}:`))).toBe(false);
     // клиент видит выданное, но отзыв пока нельзя
     const view = (await api(CLIENT).get(`/api/orders/${id}`)).json();
