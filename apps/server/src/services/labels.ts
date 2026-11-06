@@ -8,5 +8,18 @@ export function orderTitle(product: { title: string; access: AccessMode }, varia
   return `${product.title.trim()}${mode ? ` (${mode.toLowerCase()})` : ''} · ${variant}`;
 }
 
-/** Postgres не хранит нулевой символ в тексте: вырезаем его из всего, что пишут люди */
-export const stripNul = (s: string) => s.replace(/\u0000/g, '');
+/**
+ * Текст, который база примет: Postgres не хранит нулевой символ, а половинку суррогатной пары
+ * (в JSON её можно прислать как «\ud800») не принимает драйвер. Нулевой символ вырезаем,
+ * половинку меняем на «�»: так кривой ввод сохраняется, а не роняет запрос ошибкой 500.
+ */
+export const cleanText = (s: string) =>
+  s.replace(/\u0000/g, '').replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '\ufffd');
+
+/** cleanText для всех строк тела запроса, включая ключи. Глубже 32 уровней наших форм не бывает */
+export function cleanDeep(v: unknown, depth = 0): unknown {
+  if (typeof v === 'string') return cleanText(v);
+  if (!v || typeof v !== 'object' || depth > 32) return v;
+  if (Array.isArray(v)) return v.map((x) => cleanDeep(x, depth + 1));
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [cleanText(k), cleanDeep(x, depth + 1)]));
+}

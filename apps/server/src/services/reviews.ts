@@ -2,7 +2,7 @@ import { Prisma, type AccessMode } from '@prisma/client';
 import { prisma } from '../db.js';
 import { ShopError } from './orders.js';
 import { notifier, type ReviewNotice } from './notify.js';
-import { stripNul } from './labels.js';
+import { cleanText } from './labels.js';
 
 export const REVIEW_TEXT_MAX = 1000;
 
@@ -27,7 +27,7 @@ const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownR
 export async function submitReview(orderId: number, userId: number, input: { rating: number; text?: string }) {
   if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5)
     throw new ShopError('bad_rating', 'Поставьте оценку от 1 до 5');
-  const text = Array.from(stripNul(input.text ?? '').trim()).slice(0, REVIEW_TEXT_MAX).join('').trim();
+  const text = Array.from(cleanText(input.text ?? '').trim()).slice(0, REVIEW_TEXT_MAX).join('').trim();
 
   const order = await prisma.order.findFirst({
     where: { id: orderId, userId },
@@ -69,6 +69,8 @@ export async function submitReview(orderId: number, userId: number, input: { rat
   });
   if (!changed.count) {
     const fresh = await prisma.review.findUniqueOrThrow({ where: { orderId } });
+    // Одновременная такая же правка (повтор запроса) уже сохранила то же самое: это успех, а не «слишком часто»
+    if (fresh.rating === input.rating && fresh.text === text) return fresh;
     if (fresh.editCount >= reviewPolicy.maxEdits)
       throw new ShopError('edit_limit', `Отзыв можно изменить не больше ${reviewPolicy.maxEdits} раз`);
     const wait = Math.max(1, Math.ceil((fresh.activityAt.getTime() + reviewPolicy.editCooldownMs - now.getTime()) / 1000));

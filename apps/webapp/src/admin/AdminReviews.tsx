@@ -10,10 +10,11 @@ type Filter = (typeof FILTERS)[number][0];
 export function AdminReviews() {
   const [filter, setFilter] = useState<Filter>('all');
   const { data, error, setData } = useLoad(() => api<Page>(`/api/admin/reviews?filter=${filter}`), [filter]);
-  const [loadingMore, setLoadingMore] = useState(false);
-  // Страница, догруженная для старого фильтра, не должна дописаться в список нового
-  const current = useRef(filter);
-  current.current = filter;
+  // Номер списка: растёт при каждой смене фильтра. Догрузка, начатая для прошлого списка, в новый не попадёт,
+  // даже если вернуться на тот же фильтр, и её «Загружаем…» не держит кнопку нового списка
+  const gen = useRef(0);
+  const [loadingFor, setLoadingFor] = useState<number | null>(null);
+  const loadingMore = loadingFor === gen.current;
   const toast = useToast();
 
   const patchItem = (id: number, isHidden: boolean) =>
@@ -32,20 +33,20 @@ export function AdminReviews() {
 
   async function more() {
     if (!data?.nextBefore || !data.nextAt || loadingMore) return;
-    const f = filter;
-    setLoadingMore(true);
+    const g = gen.current;
+    setLoadingFor(g);
     try {
-      const next = await api<Page>(`/api/admin/reviews?filter=${f}&before=${data.nextBefore}&at=${encodeURIComponent(data.nextAt)}`);
-      if (current.current !== f) return;
+      const next = await api<Page>(`/api/admin/reviews?filter=${filter}&before=${data.nextBefore}&at=${encodeURIComponent(data.nextAt)}`);
+      if (gen.current !== g) return;
       setData((d) => {
         if (!d) return d;
         const have = new Set(d.items.map((x) => x.id));
         return { ...next, items: [...d.items, ...next.items.filter((x) => !have.has(x.id))] };
       });
     } catch (e) {
-      toast((e as Error).message, true);
+      if (gen.current === g) toast((e as Error).message, true);
     } finally {
-      setLoadingMore(false);
+      setLoadingFor((cur) => (cur === g ? null : cur));
     }
   }
 
@@ -60,6 +61,7 @@ export function AdminReviews() {
         {FILTERS.map(([k, t]) => (
           <button key={k} className={`pill ${filter === k ? 'solid' : 'm'}`} style={{ height: 32, padding: '0 14px', fontSize: 13.5 }} onClick={() => {
             if (k === filter) return;
+            gen.current += 1;
             setData(null); // список и «Показать ещё» старого фильтра не показываем, пока грузится новый
             setFilter(k);
           }}>{t}</button>

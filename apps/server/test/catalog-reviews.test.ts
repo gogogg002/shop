@@ -380,22 +380,91 @@ describe('админка: все отзывы постранично', () => {
   });
 });
 
-describe('демо-каталог', () => {
-  it('на старой базе без режимов и при повторном запуске не плодит дубли', async () => {
-    const { seedCatalog } = await import('../src/seed.js');
-    const tg = await prisma.category.upsert({ where: { slug: 'telegram' }, create: { slug: 'telegram', title: 'Telegram' }, update: {} });
-    // так выглядела база после старого сида: режимов ещё не было
-    await prisma.product.create({ data: { categoryId: tg.id, title: 'Telegram Stars', variants: { create: [{ title: '50 Stars', price: R(85) }] } } });
-    await prisma.product.create({ data: { categoryId: tg.id, title: 'Telegram Premium', variants: { create: [{ title: '3 мес', price: R(1190) }] } } });
+describe('кривой ввод — ответ 400, а не падение сервера', () => {
+  it('огромные номера и суммы в теле запроса', async () => {
+    for (const variantId of [3_000_000_000, 1e20]) {
+      expect((await as(BUYER).post('/api/orders/quote', { variantId, method: 'UAH' })).statusCode).toBe(400);
+      expect((await as(BUYER).post('/api/orders', { variantId, method: 'UAH', recipient: '@durov' })).statusCode).toBe(400);
+    }
+    const cat = await prisma.category.findFirstOrThrow({ where: { slug: 'tg-modes' } });
+    const big = 3_000_000_000;
+    const bad = [
+      as(ADMIN).post('/api/admin/products', { categoryId: big, title: 'Тест' }),
+      as(ADMIN).post('/api/admin/products', { categoryId: cat.id, title: 'Тест', sort: big }),
+      as(ADMIN).patch(`/api/admin/products/${solo.id}`, { sort: -big }),
+      as(ADMIN).post(`/api/admin/products/${solo.id}/variants`, { title: 'Тест', price: big }),
+      as(ADMIN).patch(`/api/admin/variants/${solo.variants[0].id}`, { cost: big }),
+      as(ADMIN).patch(`/api/admin/variants/${solo.variants[0].id}`, { oldPrice: big }),
+      as(ADMIN).post('/api/admin/categories', { slug: 'big', title: 'Тест', sort: big }),
+      as(ADMIN).post('/api/admin/promocodes', { code: 'BIG', amount: big }),
+      as(ADMIN).post('/api/admin/promocodes', { code: 'BIG', usesLeft: big }),
+    ];
+    expect((await Promise.all(bad)).map((r) => r.statusCode)).toEqual(bad.map(() => 400));
+  });
 
-    await seedCatalog();
-    await seedCatalog();
+  it('несуществующая категория, занятый адрес и чужой вариант — понятная ошибка', async () => {
+    expect((await as(ADMIN).post('/api/admin/products', { categoryId: 999_999, title: 'Тест' })).statusCode).toBe(400);
+    expect((await as(ADMIN).post('/api/admin/categories', { slug: 'tg-modes', title: 'Дубль' })).statusCode).toBe(409);
+    expect((await as(ADMIN).patch('/api/admin/variants/999999', { price: 100 })).statusCode).toBe(404);
+  });
 
-    const active = await prisma.product.findMany({ where: { isActive: true, category: { slug: { in: ['telegram', 'ai', 'games', 'discord'] } } }, select: { title: true, access: true } });
-    const key = (p: { title: string; access: string }) => `${p.title}|${p.access}`;
-    expect(active.map(key).sort()).toEqual([
-      'ChatGPT Plus|UNSPECIFIED', 'Discord Nitro|UNSPECIFIED', 'Telegram Premium|NO_LOGIN', 'Telegram Premium|WITH_LOGIN',
-      'Telegram Stars|NO_LOGIN', 'Пополнение Steam|UNSPECIFIED',
-    ]);
+  it('нулевой символ в промокоде', async () => {
+    const r = await as(BUYER).post('/api/orders/quote', { variantId: solo.variants[0].id, method: 'UAH', promoCode: 'A\u0000B' });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toBe('bad_promo');
+  });
+
+  it('оборванная суррогатная пара в чате, отзыве, чеке и настройках сохраняется как «�»', async () => {
+    const id = await deliveredOrder(solo.variants[0].id, '@durov');
+    const chat = await as(BUYER).post(`/api/orders/${id}/messages`, { text: 'привет \ud800' });
+    expect(chat.statusCode).toBe(200);
+    expect(chat.json().text).toBe('привет �');
+
+    const review = await as(BUYER).post(`/api/orders/${id}/review`, { rating: 5, text: '\udc00 всё пришло\u0000' });
+    expect(review.statusCode).toBe(200);
+    expect(review.json().text).toBe('� всё пришло');
+
+    const pending = (await as(BUYER).post('/api/orders', { variantId: solo.variants[0].id, method: 'UAH', recipient: '@durov' })).json().id;
+    sent.length = 0;
+    const proof = await as(BUYER).post(`/api/orders/${pending}/proof`, { note: 'чек \ud83d' });
+    expect(proof.statusCode).toBe(200);
+    expect(sent.filter((m) => m === `proof:${pending}`)).toHaveLength(1);
+    expect((await prisma.message.findFirstOrThrow({ where: { orderId: pending } })).text).toBe('чек �');
+
+    const settings = await as(ADMIN).patch('/api/admin/settings', { supportUsername: 'TimaGopl\u0000' });
+    expect(settings.statusCode).toBe(200);
+    expect(settings.json().supportUsername).toBe('TimaGopl');
+  });
+
+  it('скрытый товар или вариант не считается к оплате', async () => {
+    const vid = solo.variants[0].id;
+    const quote = () => as(BUYER).post('/api/orders/quote', { variantId: vid, method: 'UAH', recipient: '@durov' });
+    expect((await quote()).statusCode).toBe(200);
+    await as(ADMIN).patch(`/api/admin/variants/${vid}`, { isActive: false });
+    expect((await quote()).statusCode).toBe(404);
+    await as(ADMIN).patch(`/api/admin/variants/${vid}`, { isActive: true });
+    await as(ADMIN).patch(`/api/admin/products/${solo.id}`, { isActive: false });
+    expect((await quote()).statusCode).toBe(404);
+    await as(ADMIN).patch(`/api/admin/products/${solo.id}`, { isActive: true });
+    expect((await quote()).statusCode).toBe(200);
+  });
+
+  it('две одинаковые правки отзыва одновременно: обе успешны, правка одна', async () => {
+    for (let round = 0; round < 5; round++) {
+      const id = await deliveredOrder(solo.variants[0].id, '@durov');
+      await as(BUYER).post(`/api/orders/${id}/review`, { rating: 2, text: 'долго' });
+      // пауза между правками прошла
+      await prisma.review.update({ where: { orderId: id }, data: { activityAt: new Date(Date.now() - 60_000) } });
+      const buyer = await prisma.user.findFirstOrThrow({ where: { tgId: BigInt(BUYER) } });
+      sent.length = 0;
+      const results = await Promise.allSettled([
+        submitReview(id, buyer.id, { rating: 5, text: 'Всё пришло' }),
+        submitReview(id, buyer.id, { rating: 5, text: 'Всё пришло' }),
+      ]);
+      expect(results.map((r) => (r.status === 'fulfilled' ? 'ok' : (r.reason as ShopError).code))).toEqual(['ok', 'ok']);
+      expect((await prisma.review.findUniqueOrThrow({ where: { orderId: id } })).editCount).toBe(1);
+      expect(sent.filter((m) => m.startsWith(`review-edit:${id}:`))).toHaveLength(1);
+    }
   });
 });
+

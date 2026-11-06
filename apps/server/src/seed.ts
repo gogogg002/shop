@@ -1,11 +1,13 @@
 /**
  * Демо-каталог, чтобы мини-апп не был пустым. Цены в копейках. Запуск: pnpm db:seed.
- * Повторный запуск и запуск на базе со старым каталогом (без режимов входа) ничего не дублируют.
+ * Только добавляет: товар, который уже есть под тем же названием в любой категории, не создаётся второй раз,
+ * а существующие товары не меняются и не удаляются. Старую базу (Premium подарком, без режимов входа)
+ * переводит не сид, а node dist/migrate-catalog.js.
  */
 import { pathToFileURL } from 'node:url';
 import type { AccessMode } from '@prisma/client';
 import { prisma } from './db.js';
-import { syncTelegramPremium } from './catalog-sync.js';
+import { ensurePremiumModes } from './catalog-sync.js';
 import { getSettings, saveSettings } from './services/settings.js';
 
 const R = (rub: number) => rub * 100;
@@ -40,15 +42,11 @@ export async function seedCatalog() {
   for (const [ci, c] of catalog.entries()) {
     const cat = await prisma.category.upsert({ where: { slug: c.slug }, create: { slug: c.slug, title: c.title, sort: ci }, update: {} });
 
-    if (c.slug === 'telegram') await syncTelegramPremium(cat.id);
+    if (c.slug === 'telegram') await ensurePremiumModes(cat.id);
 
     for (const [pi, p] of c.products.entries()) {
-      // Ищем по названию в категории при любом режиме: у товаров из старого сида режима ещё нет
-      const exists = await prisma.product.findFirst({ where: { categoryId: cat.id, title: p.title }, orderBy: { id: 'asc' } });
-      if (exists) {
-        if (exists.access === 'UNSPECIFIED' && p.access) await prisma.product.update({ where: { id: exists.id }, data: { access: p.access } });
-        continue;
-      }
+      // По названию во всех категориях: товар, который админ перенёс в другую категорию, не дублируем
+      if (await prisma.product.findFirst({ where: { title: p.title }, select: { id: true } })) continue;
       await prisma.product.create({
         data: {
           categoryId: cat.id, title: p.title, subtitle: p.subtitle, icon: p.icon, glass: p.glass, sort: pi + 1,
