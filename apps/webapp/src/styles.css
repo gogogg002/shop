@@ -200,8 +200,6 @@ b, strong { font-weight: 650; }
 .wh-l span { font-size: 13px; color: var(--m); }
 .wh-r { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 500; color: var(--a); white-space: nowrap; }
 .price-xl { font: 700 38px/1 var(--display); letter-spacing: -0.05em; }
-.eta { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px 0 9px; border-radius: 999px; flex: none;
-  background: var(--lime-tint); border: 1px solid rgba(198,249,78,.24); color: var(--a); font-size: 13.5px; font-weight: 600; }
 .trust-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
 .trust-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.25; color: var(--m); }
 .trust-list svg { color: var(--a); flex: none; }
