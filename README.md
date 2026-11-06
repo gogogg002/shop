@@ -99,7 +99,11 @@ docker compose -f docker-compose.yml -f ~/krynel-rollback.yml up -d --build app
 docker compose exec -T db psql -U krynel krynel -c "UPDATE \"Product\" SET access='UNSPECIFIED', \"isActive\"=false WHERE access='GIFT'; UPDATE \"Product\" SET \"recipientKind\"='USERNAME' WHERE \"recipientKind\"='STEAM'; UPDATE \"Variant\" SET \"isActive\"=false WHERE \"perUnit\""
 ```
 
-Старая версия не умеет своё количество, поэтому Stars и Steam после этого не продаются, пока не заведёте им обычные варианты.
+Старая версия не умеет своё количество, поэтому Stars и Steam после этого не продаются, пока не заведёте им обычные варианты. Вернувшись после такого отката на свежую версию, включите всё обратно (`migrate-catalog` выключенное своё количество сам не включает):
+
+```bash
+docker compose exec -T db psql -U krynel krynel -c "UPDATE \"Variant\" SET \"isActive\"=true WHERE \"perUnit\"; UPDATE \"Product\" SET \"recipientKind\"='STEAM' WHERE title='Пополнение Steam'; UPDATE \"Product\" SET access='GIFT', \"isActive\"=true WHERE title='Telegram Premium' AND access='UNSPECIFIED' AND subtitle='Подарком на @username'"
+```
 
 Восстановление из бэкапа заменяет всю базу: заказы, отзывы и сообщения после бэкапа пропадут, а коды, выданные после него, снова окажутся «в наличии» (их стоит удалить в редакторе товара):
 

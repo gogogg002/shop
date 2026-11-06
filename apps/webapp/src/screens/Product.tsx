@@ -120,7 +120,7 @@ export function Product({ id }: { id: number }) {
             {v.perUnit && <div className="muted small" style={{ marginTop: 8 }}>{perUnitText}</div>}
             {save > 0 && <div className="muted small" style={{ marginTop: 8 }}><s>{rub(v.oldPrice!)}</s> · экономия {rub(v.oldPrice! - v.price)}</div>}
           </div>
-          <span className="eta"><Icon name="bolt" size={14} />{p.deliveryType === 'CODES' ? 'сразу' : '≈ 5 мин'}</span>
+          <span className="eta"><Icon name="bolt" size={14} />{p.deliveryType === 'CODES' && !v?.perUnit ? 'сразу' : '≈ 5 мин'}</span>
         </div>
       )}
 
@@ -183,7 +183,7 @@ export function Product({ id }: { id: number }) {
         ) : (
           <button className="btn block" disabled={!v || !recipientOk || !qtyOk}
             onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}${v!.perUnit ? `&q=${qty}` : ''}`)}>
-            {!qtyOk ? (qtyFraction ? (isStars ? 'Только целое число звёзд' : 'Сумма целым числом, без копеек') : isStars ? 'Укажите количество звёзд' : 'Укажите сумму')
+            {!qtyOk ? (qtyFraction ? `Без точек и запятых, например ${isStars ? '500' : '1000'}` : isStars ? 'Укажите количество звёзд' : 'Укажите сумму')
               : p.needsRecipient && !recipientOk ? spec.hint
               : <span>Оформить <span className="dot">·</span> {v ? rub(total) : ''}</span>}
           </button>

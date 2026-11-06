@@ -78,9 +78,9 @@ export function ProductEdit({ id }: { id: number | null }) {
         : await api<{ id: number }>('/api/admin/products', { body: p });
       for (const [i, v] of vars.entries()) {
         const body = {
-          title: v.title.trim(), price: toKop(v.price), oldPrice: v.oldPrice && !v.perUnit ? toKop(v.oldPrice) : null, cost: v.cost ? toKop(v.cost) : 0,
-          isActive: v.isActive, sort: i,
-          ...(v.perUnit ? { minQty: qtyInt(v.minQty), maxQty: qtyInt(v.maxQty) } : {}),
+          title: v.title.trim(), price: toKop(v.price), cost: v.cost ? toKop(v.cost) : 0, isActive: v.isActive, sort: i,
+          // у своего количества старой цены в редакторе нет: не трогаем её, а не стираем
+          ...(v.perUnit ? { minQty: qtyInt(v.minQty), maxQty: qtyInt(v.maxQty) } : { oldPrice: v.oldPrice ? toKop(v.oldPrice) : null }),
         };
         if (v.id) await api(`/api/admin/variants/${v.id}`, { method: 'PATCH', body });
         else await api(`/api/admin/products/${saved.id}/variants`, { body });
