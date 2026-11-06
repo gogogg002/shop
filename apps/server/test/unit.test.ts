@@ -107,3 +107,19 @@ describe('название заказа в сообщениях', () => {
     expect(orderTitle({ title: 'ChatGPT Plus', access: 'UNSPECIFIED' }, '1 мес')).toBe('ChatGPT Plus · 1 мес');
   });
 });
+
+describe('быстрые метки отзыва', () => {
+  it('разбор и сборка взаимно обратны: неизменённый отзыв не считается правкой', async () => {
+    const { joinTags, splitTags } = await import('../../webapp/src/reviewTags.js');
+    const saved = ['', 'Быстро', 'Быстро, Честная цена', 'Быстро, Честная цена. Всё чётко', 'Поддержка помогла. Долго, но помогли',
+      'быстро, честная цена', 'Быстро, Быстро', 'Быстро. . странно', 'Обычный отзыв. С точкой', 'Честная цена.', 'Быстро,Честная цена'];
+    for (const s of saved) {
+      const { tags, rest } = splitTags(s);
+      expect([s, joinTags(tags, rest)]).toEqual([s, s]);
+    }
+    expect(splitTags('Быстро, Честная цена. Всё чётко')).toEqual({ tags: ['Быстро', 'Честная цена'], rest: 'Всё чётко' });
+    expect(splitTags('быстро, честная цена').tags).toEqual([]);
+    expect(joinTags(['Честная цена'], '  ')).toBe('Честная цена');
+    expect(joinTags([], 'Текст')).toBe('Текст');
+  });
+});

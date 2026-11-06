@@ -80,14 +80,14 @@ export const useMe = () => useContext(MeCtx);
 function Nav({ admin, path }: { admin: boolean; path: string }) {
   const items = admin
     ? [['/admin', 'chart', 'Сводка'], ['/admin/orders', 'list', 'Заказы'], ['/admin/products', 'box', 'Товары'], ['/admin/reviews', 'starO', 'Отзывы'], ['/admin/settings', 'gear', 'Настройки']]
-    : [['/', 'grid', 'Витрина'], ['/orders', 'list', 'Заказы']];
+    : [['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы']];
   const active = (to: string) => (to === '/' || to === '/admin' ? path === to : path.startsWith(to));
   return (
     <nav className="nav" aria-label="Разделы">
       {items.map(([to, icon, label]) => (
-        <a key={to} href={`#${to}`} className={active(to) ? 'on' : ''} aria-label={label}>
+        <a key={to} href={`#${to}`} className={active(to) ? 'on' : ''} aria-current={active(to) ? 'page' : undefined}>
           <Icon name={icon} />
-          {active(to) && label}
+          <span>{label}</span>
         </a>
       ))}
     </nav>
@@ -101,8 +101,8 @@ export function App() {
   useEffect(() => {
     tg?.ready();
     tg?.expand();
-    tg?.setHeaderColor('#000000');
-    tg?.setBackgroundColor('#000000');
+    tg?.setHeaderColor('#060607');
+    tg?.setBackgroundColor('#060607');
   }, []);
 
   // Системная кнопка «Назад» Telegram на вложенных экранах

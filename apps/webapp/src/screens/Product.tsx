@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, openTelegramChat, prettyPhone, ratingText, reviewsWord, rub, type ProductView } from '../api';
 import { normalizePhone } from '../phone';
-import { Icon, Key, useLoad } from '../ui/kit';
+import { Icon, useLoad } from '../ui/kit';
+import { Druse, FacetStar, glyphOf, tintOf } from '../ui/Crystal';
 import { ReviewCard } from '../ui/ReviewCard';
 import { go, swap, useMe } from '../App';
 
@@ -43,23 +44,21 @@ export function Product({ id }: { id: number }) {
   const support = me.supportUsername.replace(/^@/, '');
   const options = p.variants.length + (p.wholesale ? 1 : 0);
 
-  return (
-    <div className="page" style={{ paddingTop: 0, gap: 18, paddingBottom: 110 }}>
-      <section style={{ position: 'relative', height: 250, margin: '0 -16px' }}>
-        <div className="glow" style={{ height: 250, background: 'radial-gradient(60% 60% at 50% 55%, rgba(230,15,30,.8), rgba(120,0,10,.3) 50%, transparent 78%)' }} />
-        <Key icon={p.icon} glass={p.glass} size={124} style={{ position: 'absolute', left: 'calc(50% - 62px)', top: 56, rotate: '-12deg' }} />
-      </section>
+  const save = v?.oldPrice && v.oldPrice > v.price ? Math.round((1 - v.price / v.oldPrice) * 100) : 0;
 
-      <div>
+  return (
+    <div className="page" style={{ paddingTop: 8, gap: 16, paddingBottom: 130 }}>
+      <Druse kind="product" glyph={glyphOf(p.icon)} tint={tintOf(p.glass)} top={6} />
+
+      <header style={{ padding: '14px 4px 0', minHeight: 150 }}>
         <div className="cap">{p.category}</div>
-        <h1 className="disp" style={{ fontSize: 30, marginTop: 8 }}>{p.title}</h1>
-        {p.subtitle && <p className="muted" style={{ marginTop: 6 }}>{p.subtitle}</p>}
-        {p.rating.count > 0 && (
-          <a href={`#/reviews?p=${p.id}`} className="trust" style={{ marginTop: 10 }}>
-            <span className="trust-star">★</span><b>{ratingText(p.rating.avg)}</b><span className="muted">· {reviewsWord(p.rating.count)}</span>
+        <h1 className="disp" style={{ fontSize: 28, marginTop: 12, maxWidth: 250 }}>{p.title}</h1>
+        {p.rating.count > 0 ? (
+          <a href={`#/reviews?p=${p.id}`} className="row" style={{ gap: 5, marginTop: 14, fontSize: 13.5, fontWeight: 500 }}>
+            <FacetStar size={14} /><b>{ratingText(p.rating.avg)}</b><span className="muted">· {reviewsWord(p.rating.count)}</span>
           </a>
-        )}
-      </div>
+        ) : p.subtitle ? <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>{p.subtitle}</p> : null}
+      </header>
 
       {p.siblings.length > 1 && (
         <div className="seg" role="tablist" aria-label="Как выдаём">
@@ -71,35 +70,39 @@ export function Product({ id }: { id: number }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(options, 3)}, 1fr)`, gap: 8 }} role="radiogroup" aria-label="Вариант">
-        {p.variants.map((x) => (
-          <button key={x.id} role="radio" aria-checked={x.id === pick} disabled={!x.inStock}
-            className={`tile ${x.id === pick ? 'on' : ''}`} style={{ opacity: x.inStock ? 1 : 0.4 }} onClick={() => setPick(x.id)}>
-            <div className="disp" style={{ fontSize: 18 }}>{x.title}</div>
-            <div style={{ fontSize: 12, marginTop: 2, opacity: 0.75 }}>{x.inStock ? rub(x.price) : 'нет'}</div>
-          </button>
-        ))}
+      <div className="opts" role="radiogroup" aria-label="Вариант" style={p.variants.length === 1 ? { gridTemplateColumns: '1fr' } : undefined}>
+        {p.variants.map((x) => {
+          const off = x.oldPrice && x.oldPrice > x.price ? Math.round((1 - x.price / x.oldPrice) * 100) : 0;
+          return (
+            <button key={x.id} role="radio" aria-checked={x.id === pick} disabled={!x.inStock}
+              className={`opt ${x.id === pick ? 'on' : ''}`} onClick={() => setPick(x.id)}>
+              <span className="opt-t">{x.title}</span>
+              <span className="opt-p">{x.inStock ? rub(x.price) : 'нет'}</span>
+              {off > 0 && <i className="opt-save" style={{ fontStyle: 'normal' }}>−{off}%</i>}
+            </button>
+          );
+        })}
         {p.wholesale && (
-          <button role="radio" aria-checked={bulk} className={`tile ${bulk ? 'on' : ''}`} onClick={() => setPick('bulk')}>
-            <div className="disp" style={{ fontSize: 18 }}>Опт</div>
-            <div style={{ fontSize: 12, marginTop: 2, opacity: 0.75 }}>от 10 шт</div>
+          <button role="radio" aria-checked={bulk} className={`opt wide ${bulk ? 'on' : ''}`} onClick={() => setPick('bulk')}>
+            <span className="wh-l"><b>Опт</b><span className="ellipsis">от 10 шт, цена в поддержке</span></span>
+            {support && <span className="wh-r">@{support}<Icon name="chev" size={14} /></span>}
           </button>
         )}
       </div>
 
       {v && (
-        <div className="between" style={{ alignItems: 'flex-end' }}>
+        <div className="between" style={{ alignItems: 'center', padding: '2px 4px 0' }}>
           <div>
-            <div className="disp" style={{ fontSize: 42, lineHeight: 0.9 }}>{rub(v.price)}</div>
-            {v.oldPrice && <div className="muted small" style={{ marginTop: 8 }}><s>{rub(v.oldPrice)}</s> · экономия {rub(v.oldPrice - v.price)}</div>}
+            <div className="price-xl">{rub(v.price)}</div>
+            {save > 0 && <div className="muted small" style={{ marginTop: 8 }}><s>{rub(v.oldPrice!)}</s> · экономия {rub(v.oldPrice! - v.price)}</div>}
           </div>
-          <span className="pill ok" style={{ height: 30 }}><Icon name="bolt" size={13} />{p.deliveryType === 'CODES' ? 'сразу' : '≈ 5 мин'}</span>
+          <span className="eta"><Icon name="bolt" size={14} />{p.deliveryType === 'CODES' ? 'сразу' : '≈ 5 мин'}</span>
         </div>
       )}
 
       {bulk && (
         <div className="card pad col" style={{ gap: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 17 }}>Оптом дешевле</div>
+          <div className="disp" style={{ fontSize: 17 }}>Оптом дешевле</div>
           <p className="muted" style={{ lineHeight: 1.45 }}>
             Берёте от 10 штук? Напишите в поддержку {support && <b style={{ color: 'var(--t)' }}>@{support}</b>}: назовите товар, срок и количество, и мы пришлём цену за штуку.
           </p>
@@ -115,7 +118,7 @@ export function Product({ id }: { id: number }) {
       )}
       {!bulk && p.needsRecipient && p.recipientKind === 'PHONE' && (recipientOk || recipient.replace(/\D/g, '').length >= 10) && (
         // Показываем, как поняли номер: «900 123-45-67» станет +7, украинский «067…» станет +380
-        <p className="small" style={{ marginTop: -8, color: recipientOk ? 'var(--m)' : 'var(--warn)' }} aria-live="polite">
+        <p className="small" style={{ marginTop: -8, padding: '0 4px', color: recipientOk ? 'var(--m)' : 'var(--warn)' }} aria-live="polite">
           {recipientOk ? `Номер: ${prettyPhone(normalizePhone(recipient)!)}` : 'Не похоже на номер. Укажите код страны, например +7 900 123-45-67'}
         </p>
       )}
@@ -127,19 +130,22 @@ export function Product({ id }: { id: number }) {
         </div>
       )}
 
-      {p.description && <p className="muted" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.description}</p>}
+      <ul className="trust-list" style={{ padding: '0 4px' }}>
+        {p.access === 'NO_LOGIN' && <li><Icon name="shield" size={20} />Без входа в ваш аккаунт</li>}
+        {p.access === 'WITH_LOGIN' && <li><Icon name="shield" size={20} />Входим только для оформления</li>}
+        <li><Icon name="clock" size={20} />Не выдали за 30 минут — вернём деньги</li>
+      </ul>
 
-      <div className="grid2" style={{ fontSize: 13, lineHeight: 1.3 }}>
-        {p.access === 'NO_LOGIN' && <div className="row" style={{ gap: 10 }}><Icon name="shield" size={20} /><span className="muted">Без входа в ваш аккаунт</span></div>}
-        {p.access === 'WITH_LOGIN' && <div className="row" style={{ gap: 10 }}><Icon name="shield" size={20} /><span className="muted">Входим только для оформления</span></div>}
-        <div className="row" style={{ gap: 10 }}><Icon name="clock" size={20} /><span className="muted">Не выдали за 30 мин — вернём деньги</span></div>
-      </div>
+      {p.description && <p className="muted" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap', padding: '0 4px' }}>{p.description}</p>}
 
       {p.reviews.length > 0 && (
-        <section className="col" aria-label="Отзывы">
-          <div className="between">
-            <h2 className="disp h2">Отзывы</h2>
-            <a href={`#/reviews?p=${p.id}`} className="small" style={{ color: 'var(--a2)', fontWeight: 600 }}>Все {p.rating.count}</a>
+        <section className="col" aria-label="Отзывы" style={{ marginTop: 4 }}>
+          <div className="between" style={{ padding: '0 4px' }}>
+            <span className="row" style={{ gap: 6 }}>
+              <FacetStar size={18} /><span className="disp" style={{ fontSize: 16 }}>{ratingText(p.rating.avg)}</span>
+              <span className="muted" style={{ fontSize: 14 }}>· {reviewsWord(p.rating.count)}</span>
+            </span>
+            <a href={`#/reviews?p=${p.id}`} className="row lime" style={{ gap: 2, fontSize: 14, fontWeight: 500, minHeight: 44 }}>Все отзывы<Icon name="chev" size={16} /></a>
           </div>
           {p.reviews.map((r) => <ReviewCard key={r.id} r={r} />)}
         </section>
@@ -147,13 +153,13 @@ export function Product({ id }: { id: number }) {
 
       <div className="sticky-cta">
         {bulk ? (
-          <button className="btn block" style={{ height: 60, borderRadius: 20 }} disabled={!support} onClick={() => openTelegramChat(support)}>
+          <button className="btn block" disabled={!support} onClick={() => openTelegramChat(support)}>
             Написать @{support}
           </button>
         ) : (
-          <button className="btn block" style={{ height: 60, borderRadius: 20 }} disabled={!v || !recipientOk}
+          <button className="btn block" disabled={!v || !recipientOk}
             onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}`)}>
-            {p.needsRecipient && !recipientOk ? spec.hint : `Оформить · ${v ? rub(v.price) : ''}`}
+            {p.needsRecipient && !recipientOk ? spec.hint : <span>Оформить <span className="dot">·</span> {v ? rub(v.price) : ''}</span>}
           </button>
         )}
       </div>

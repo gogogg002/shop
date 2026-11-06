@@ -76,9 +76,9 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
         {me.methods.map((m) => {
           const on = m.method === method;
           return (
-            <button key={m.method} role="radio" aria-checked={on} onClick={() => setMethod(m.method)} className="card"
-              style={{ padding: 14, textAlign: 'left', borderColor: on ? 'var(--a)' : undefined, background: on ? 'rgba(255,46,62,.08)' : undefined, position: 'relative' }}>
-              {on && <span style={{ position: 'absolute', top: 10, right: 10, width: 22, height: 22, borderRadius: 11, background: 'var(--a)', display: 'grid', placeItems: 'center' }}><Icon name="check" size={13} /></span>}
+            <button key={m.method} role="radio" aria-checked={on} onClick={() => setMethod(m.method)} className={`card ${on ? 'lit' : ''}`}
+              style={{ padding: 14, textAlign: 'left', position: 'relative' }}>
+              {on && <span style={{ position: 'absolute', top: 10, right: 10, width: 22, height: 22, borderRadius: 11, background: 'var(--a)', color: 'var(--on-a)', display: 'grid', placeItems: 'center' }}><Icon name="check" size={13} /></span>}
               <div style={{ fontWeight: 700, fontSize: 15.5 }}>{methodLabel[m.method].title}</div>
               <div className="muted" style={{ fontSize: 12.5, marginTop: 3 }}>
                 {methodLabel[m.method].sub}{m.fee ? ` · +${m.fee}%` : ''}{m.manual ? ' · ручная проверка' : ''}

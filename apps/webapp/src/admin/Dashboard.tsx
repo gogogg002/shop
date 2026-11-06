@@ -72,21 +72,21 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
             <svg viewBox="0 0 340 70" width="100%" height="70" style={{ marginTop: 12, display: 'block' }} role="img" aria-label="Выручка по часам">
               {s.hourly.map((v, i) => {
                 const h = Math.max(3, (v / max) * 66);
-                return <rect key={i} x={i * 14.2} y={70 - h} width={9} height={h} rx={3} fill={i === new Date().getHours() ? '#FF2E3E' : 'rgba(255,46,62,.25)'} />;
+                return <rect key={i} x={i * 14.2} y={70 - h} width={9} height={h} rx={3} fill={i === new Date().getHours() ? '#C6F94E' : 'rgba(198,249,78,.22)'} />;
               })}
             </svg>
             <div className="between mono muted" style={{ fontSize: 10.5, marginTop: 6 }}><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            <div className="card pad"><div className="cap" style={{ fontSize: 10 }}>Заказы</div><div className="disp" style={{ fontSize: 26, marginTop: 6 }}>{s.orders}</div></div>
-            <div className="card pad"><div className="cap" style={{ fontSize: 10 }}>Прибыль</div><div className="disp" style={{ fontSize: 22, marginTop: 6 }}>{rub(s.profit)}</div></div>
-            <div className="card pad" style={{ background: s.queue ? 'var(--a)' : undefined, borderColor: s.queue ? 'var(--a)' : undefined }}>
-              <div className="cap" style={{ fontSize: 10, color: s.queue ? 'rgba(255,255,255,.75)' : undefined }}>В очереди</div>
-              <div className="disp" style={{ fontSize: 26, marginTop: 6 }}>{s.queue}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 1.15fr', gap: 10 }}>
+            <div className="card" style={{ padding: '14px 12px' }}><div className="cap" style={{ fontSize: 10, letterSpacing: '.1em' }}>Заказы</div><div className="disp" style={{ fontSize: 24, marginTop: 8 }}>{s.orders}</div></div>
+            <div className="card" style={{ padding: '14px 12px' }}><div className="cap" style={{ fontSize: 10, letterSpacing: '.1em' }}>Прибыль</div><div className="disp" style={{ fontSize: 17, marginTop: 11, whiteSpace: 'nowrap' }}>{rub(s.profit)}</div></div>
+            <div className={`card ${s.queue ? 'lit' : ''}`} style={{ padding: '14px 12px' }}>
+              <div className={`cap ${s.queue ? 'lit' : ''}`} style={{ fontSize: 10, letterSpacing: '.1em', whiteSpace: 'nowrap' }}>В очереди</div>
+              <div className="disp" style={{ fontSize: 24, marginTop: 8 }}>{s.queue}</div>
             </div>
           </div>
           {s.lowStock.map((l) => (
-            <a key={l.variantId} href="#/admin/products" className="row" style={{ background: 'rgba(255,181,71,.08)', border: '1px solid rgba(255,181,71,.25)', borderRadius: 16, padding: '12px 14px' }}>
+            <a key={l.variantId} href="#/admin/products" className="row" style={{ background: 'rgba(255,201,120,.07)', border: '1px solid rgba(255,201,120,.22)', borderRadius: 16, padding: '12px 14px' }}>
               <b style={{ color: 'var(--warn)' }}>!</b><span className="sp small"><b>{l.title}:</b> осталось кодов {l.left}</span><span style={{ color: 'var(--warn)', fontWeight: 600, fontSize: 13.5 }}>Загрузить</span>
             </a>
           ))}
