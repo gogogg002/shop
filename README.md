@@ -33,7 +33,7 @@
 ```bash
 cp .env.example .env    # заполнить BOT_TOKEN, ADMIN_IDS, PUBLIC_URL и токены платёжек
 docker compose up -d --build
-docker compose exec app npx tsx src/seed.ts   # демо-каталог, по желанию
+docker compose exec app node dist/seed.js     # демо-каталог, по желанию
 ```
 
 Приложение слушает `127.0.0.1:3000`. Перед ним ставится nginx или Caddy с сертификатом. Затем:
@@ -75,14 +75,33 @@ SEED=1 bash deploy/install.sh   # SEED=1 только при первом зап
 
 ### Обновление и откат
 
+Команды запускаются из папки магазина, куда клонирован репозиторий.
+
 ```bash
-mkdir -p ~/krynel-backups
-docker compose -p krynel exec -T db pg_dump -U krynel krynel | gzip > ~/krynel-backups/before-$(date +%Y%m%d-%H%M).sql.gz
-git pull && docker compose -p krynel up -d --build db app
+bash deploy/backup.sh                            # бэкап базы в ~/krynel-backups
+git pull && docker compose up -d --build db app
 ```
 
-Схема базы применяется сама при старте контейнера (`prisma db push`), новые поля всегда со значениями по умолчанию. Перед обновлением со сменой схемы снимайте бэкап, как выше.
+`backup.sh` останавливается с ошибкой, если дамп не снялся или в нём нет таблиц магазина (например, команда запущена не из той папки). В таком случае не обновляйтесь, пока не разберётесь. Схема базы применяется сама при старте контейнера (`prisma db push`), новые поля всегда со значениями по умолчанию.
 
-Откат: старый код работает на новой схеме, но его `db push` захочет удалить новые таблицы и колонки, и контейнер не запустится. Поэтому при откате добавьте `SKIP_DB_PUSH=1` в `.env`, а после возврата на свежую версию уберите. Образы старше этой версии флаг не знают: для них остановите приложение (`docker compose -p krynel stop app`) и запустите старый образ без `db push`: `docker compose -p krynel run -d --service-ports --name krynel-rollback app node dist/index.js`. Либо восстановите бэкап.
+Откат на прошлую версию. Старый код работает на новой схеме, но его `db push` захочет удалить новые колонки, и контейнер не запустится. Поэтому прошлую версию запускаем без `db push`:
+
+```bash
+printf 'services:\n  app:\n    command: node dist/index.js\n' > ~/krynel-rollback.yml
+git checkout <прошлая ветка или коммит>
+docker compose -f docker-compose.yml -f ~/krynel-rollback.yml up -d --build app
+```
+
+Вернуться на свежую версию: `git checkout <ветка> && docker compose up -d --build app`, без файла отката, и схема снова применится при старте.
+
+Восстановление из бэкапа заменяет всю базу, заказы после бэкапа пропадут:
+
+```bash
+docker compose stop app
+docker compose exec -T db dropdb -U krynel krynel
+docker compose exec -T db createdb -U krynel krynel
+gzip -dc ~/krynel-backups/<файл>.sql.gz | docker compose exec -T db psql -q -U krynel krynel
+docker compose start app
+```
 
 Нет своего домена: `DOMAIN=95-215-32-54.sslip.io`, `PUBLIC_URL=https://95-215-32-54.sslip.io` (IP через дефисы). Caddy сам выпустит HTTPS-сертификат, порты 80 и 443 должны быть открыты. Свой Telegram ID показывает команда бота `/id`.

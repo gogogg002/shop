@@ -6,7 +6,7 @@ import { config } from '../config.js';
 import { requireAdmin } from '../auth/plugin.js';
 import { getSettings, saveSettings } from '../services/settings.js';
 import { ShopError, addMessage, confirmManual, deliver, rejectManual } from '../services/orders.js';
-import { dbId, pathId } from './ids.js';
+import { bodyId, dbId, int4, pathId } from './ids.js';
 
 const idParam = (req: { params: unknown }) => pathId(req);
 
@@ -95,7 +95,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- категории ----------
   app.get('/api/admin/categories', async () => prisma.category.findMany({ orderBy: { sort: 'asc' } }));
   app.post('/api/admin/categories', async (req) => {
-    const b = z.object({ slug: z.string().min(1), title: z.string().min(1), sort: z.number().int().default(0) }).parse(req.body);
+    const b = z.object({ slug: z.string().min(1), title: z.string().min(1), sort: int4.default(0) }).parse(req.body);
     return prisma.category.create({ data: b });
   });
 
@@ -120,7 +120,7 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   const productBody = z.object({
-    categoryId: z.number().int(),
+    categoryId: bodyId,
     title: z.string().trim().min(1).max(80),
     subtitle: z.string().max(120).default(''),
     description: z.string().max(4000).default(''),
@@ -133,7 +133,7 @@ export async function adminRoutes(app: FastifyInstance) {
     wholesale: z.boolean().default(false),
     isActive: z.boolean().default(true),
     isHit: z.boolean().default(false),
-    sort: z.number().int().default(0),
+    sort: int4.default(0),
   });
   app.post('/api/admin/products', async (req) => prisma.product.create({ data: productBody.parse(req.body) }));
   app.patch('/api/admin/products/:id', async (req) =>
@@ -148,11 +148,11 @@ export async function adminRoutes(app: FastifyInstance) {
 
   const variantBody = z.object({
     title: z.string().trim().min(1).max(40),
-    price: z.number().int().positive(),
-    oldPrice: z.number().int().positive().nullable().optional(),
-    cost: z.number().int().min(0).default(0),
+    price: int4.positive(),
+    oldPrice: int4.positive().nullable().optional(),
+    cost: int4.min(0).default(0),
     isActive: z.boolean().default(true),
-    sort: z.number().int().default(0),
+    sort: int4.default(0),
   });
   app.post('/api/admin/products/:id/variants', async (req) =>
     prisma.variant.create({ data: { ...variantBody.parse(req.body), productId: idParam(req) } }));
@@ -224,9 +224,9 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/api/admin/promocodes', async (req) => {
     const b = z.object({
       code: z.string().trim().min(2).max(40).transform((s) => s.toUpperCase()),
-      amount: z.number().int().min(0).default(0),
+      amount: int4.min(0).default(0),
       percent: z.number().int().min(0).max(100).default(0),
-      usesLeft: z.number().int().positive().nullable().optional(),
+      usesLeft: int4.positive().nullable().optional(),
     }).parse(req.body);
     return prisma.promoCode.create({ data: b });
   });

@@ -7,6 +7,12 @@ export const MAX_DB_ID = 2_147_483_647;
 /** Номер из строки запроса: ?before=…, ?productId=… */
 export const dbId = z.coerce.number().int().positive().max(MAX_DB_ID);
 
+/** Номер в теле запроса (JSON): variantId, categoryId */
+export const bodyId = z.number().int().positive().max(MAX_DB_ID);
+
+/** Целое, которое помещается в колонку int4: цены в копейках, порядок сортировки, лимиты промокодов */
+export const int4 = z.number().int().min(-MAX_DB_ID - 1).max(MAX_DB_ID);
+
 /** Номер из пути (/orders/:id). Чужой, кривой или слишком большой номер — просто «не найдено» */
 export function pathId(req: { params: unknown }, message = 'Не найдено') {
   const raw = (req.params as { id?: string }).id ?? '';

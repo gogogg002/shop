@@ -4,7 +4,7 @@ import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
 import { notifier, type OrderView } from './notify.js';
 import { normalizePhone } from './phone.js';
-import { orderTitle, stripNul } from './labels.js';
+import { orderTitle, cleanText } from './labels.js';
 
 export class ShopError extends Error {
   constructor(public code: string, message: string, public status = 400) {
@@ -154,13 +154,16 @@ export async function submitProof(orderId: number, userId: number, photo: Buffer
   if (!isManual(order.method)) throw new ShopError('bad_state', 'Этот заказ оплачивается автоматически');
   if (order.status !== 'PENDING_PAYMENT' && order.status !== 'AWAITING_CONFIRMATION')
     throw new ShopError('bad_state', 'Заказ уже обработан');
+  // Подпись проверяем до уведомления админам: ошибка после него при повторной отправке дала бы второй чек
+  const text = cleanText(note ?? '').trim();
+  if (text.length > 2000) throw new ShopError('too_long', 'Подпись к чеку длиннее 2000 символов');
 
   const fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: { status: 'AWAITING_CONFIRMATION', proofFileId: fileId ?? order.proofFileId },
   });
-  if (note && stripNul(note).trim()) await addMessage(orderId, { userId, text: note, fromAdmin: false });
+  if (text) await addMessage(orderId, { userId, text, fromAdmin: false });
   return updated;
 }
 
@@ -229,7 +232,7 @@ export async function rejectManual(orderId: number, reason: string) {
 export async function deliver(orderId: number, text?: string) {
   const changed = await prisma.order.updateMany({
     where: { id: orderId, status: 'PAID' },
-    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text ? stripNul(text) : null },
+    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text ? cleanText(text) : null },
   });
   if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
   const order = (await loadOrder(orderId))!;
@@ -248,7 +251,7 @@ export async function cancelByUser(orderId: number, userId: number) {
 }
 
 export async function addMessage(orderId: number, m: { userId?: number; text: string; fromAdmin: boolean; fileId?: string }) {
-  const text = stripNul(m.text).trim();
+  const text = cleanText(m.text).trim();
   if (!text) throw new ShopError('empty', 'Напишите сообщение');
   const msg = await prisma.message.create({ data: { orderId, ...m, text } });
   const order = await loadOrder(orderId);

@@ -9,7 +9,7 @@ import {
 } from '../services/orders.js';
 import { REVIEW_TEXT_MAX, groupOf, listReviews, productGroup, productOrder, ratingSummary, submitReview } from '../services/reviews.js';
 import { ACCESS_LABEL } from '../services/labels.js';
-import { dbId, pathId } from './ids.js';
+import { bodyId, dbId, pathId } from './ids.js';
 import type { AccessMode } from '@prisma/client';
 
 const METHODS = ['CRYPTOBOT', 'XROCKET', 'LOLZ', 'SBP', 'UAH'] as const;
@@ -141,13 +141,14 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   const quoteBody = z.object({
-    variantId: z.number().int(), method: z.enum(METHODS), promoCode: z.string().optional(), recipient: z.string().max(40).optional(),
+    variantId: bodyId, method: z.enum(METHODS), promoCode: z.string().max(40).optional(), recipient: z.string().max(40).optional(),
   });
   app.post('/api/orders/quote', async (req) => {
     const b = quoteBody.parse(req.body);
     const s = await getSettings();
     const v = await prisma.variant.findUnique({ where: { id: b.variantId }, include: { product: true } });
-    if (!v) throw new ShopError('not_found', 'Товар не найден', 404);
+    // Скрытый товар не продаётся: заказ на него всё равно не создастся, так что и цену не показываем
+    if (!v || !v.isActive || !v.product.isActive) throw new ShopError('not_found', 'Товар не найден', 404);
     let promo = null;
     if (b.promoCode) {
       promo = await prisma.promoCode.findUnique({ where: { code: b.promoCode.trim().toUpperCase() } });
@@ -164,7 +165,7 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   const createBody = z.object({
-    variantId: z.number().int(),
+    variantId: bodyId,
     method: z.enum(METHODS),
     recipient: z.string().max(40).optional(),
     promoCode: z.string().max(40).optional(),
