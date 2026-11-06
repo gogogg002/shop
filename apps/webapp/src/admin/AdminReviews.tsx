@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { api, itemTitle, ratingText, shortDate, type AdminReview } from '../api';
+import { api, itemTitle, ratingText, shortDate, variantText, type AdminReview } from '../api';
 import { Key, Stars, Toggle, useLoad, useToast } from '../ui/kit';
 
 interface Page { items: AdminReview[]; total: number; visible: number; avg: number; nextBefore: number | null; nextAt: string | null }
@@ -78,7 +78,7 @@ export function AdminReviews() {
             <div className="row" style={{ gap: 12 }}>
               <Key icon={r.product.icon} glass={r.product.glass} size={40} />
               <div className="sp" style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }} className="ellipsis">{itemTitle(r.product.title, r.product.access, r.order.variant.title)}</div>
+                <div style={{ fontWeight: 600 }} className="ellipsis">{itemTitle(r.product.title, r.product.access, variantText(r.order.variant, r.order.quantity))}</div>
                 <div className="muted small ellipsis">
                   {buyer} · <a href={`#/admin/orders/${r.orderId}`} style={{ color: 'var(--a2)' }}>заказ №{r.orderId}</a> · {shortDate(r.createdAt)}
                 </div>

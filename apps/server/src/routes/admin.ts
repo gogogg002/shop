@@ -202,7 +202,7 @@ export async function adminRoutes(app: FastifyInstance) {
         include: {
           user: { select: { tgId: true, username: true, firstName: true } },
           product: { select: { title: true, access: true, icon: true, glass: true } },
-          order: { select: { id: true, variant: { select: { title: true } } } },
+          order: { select: { id: true, quantity: true, variant: { select: { title: true, perUnit: true, unit: true } } } },
         },
       }),
       prisma.review.aggregate({ _avg: { rating: true }, _count: { _all: true } }),

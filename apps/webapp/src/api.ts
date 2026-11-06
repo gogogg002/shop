@@ -184,7 +184,7 @@ export interface AdminReview {
   editCount: number; activityAt: string;
   user: { tgId: string; username: string | null; firstName: string | null };
   product: { title: string; access: Access; icon: string; glass: Glass };
-  order: { id: number; variant: { title: string } };
+  order: { id: number; quantity: number; variant: { title: string; perUnit: boolean; unit: string } };
 }
 
 /** «12 мес» или «750 Stars» для варианта со своим количеством */
