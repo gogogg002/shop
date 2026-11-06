@@ -4,7 +4,9 @@
 #   bash deploy/backup.sh <метка>    → ~/krynel-backups/<метка>-<дата>-<код>.sql.gz
 # Падает с ошибкой, если дамп не снялся или в нём нет таблиц магазина: молча пустой бэкап хуже, чем никакого.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# Папка магазина: текущая, если в ней docker-compose.yml, иначе та, где лежит скрипт
+[ -f docker-compose.yml ] || cd "$(dirname "$0")/.."
+[ -f docker-compose.yml ] || { echo "Запустите скрипт из папки магазина, где лежит docker-compose.yml" >&2; exit 1; }
 
 dir="${BACKUP_DIR:-$HOME/krynel-backups}"
 mkdir -p "$dir"
@@ -22,6 +24,12 @@ tables=$(gzip -dc "$file" | grep -c '^CREATE TABLE public\."Order"' || true)
 if [ "$tables" = 0 ]; then
   rm -f "$file"
   echo "Бэкап не снят: в базе нет таблиц магазина. Запустите скрипт из папки магазина, где лежит его docker-compose.yml" >&2
+  exit 1
+fi
+complete=$(gzip -dc "$file" | tail -n 5 | grep -c 'PostgreSQL database dump complete' || true)
+if [ "$complete" = 0 ]; then
+  rm -f "$file"
+  echo "Бэкап не снят: дамп оборвался" >&2
   exit 1
 fi
 

@@ -67,14 +67,20 @@ export function startBot() {
         .webApp('Открыть заказ', webUrl(`/admin/orders/${o.id}`));
       const caption = `🧾 Ручная оплата ждёт проверки\n\n${orderCard(o)}`;
       let fileId: string | null = null;
+      let delivered = 0;
       await toAdmins(async (chat) => {
         if (photo) {
-          const m = await bot.api.sendPhoto(chat, new InputFile(photo, `order-${o.id}.jpg`), { caption, parse_mode: 'HTML', reply_markup: kb });
-          fileId ??= m.photo?.at(-1)?.file_id ?? null;
+          const extra = { caption, parse_mode: 'HTML' as const, reply_markup: kb };
+          // Длинный скриншот из банка или не картинку Telegram фото не примет: тогда шлём тот же файл документом
+          const m = await bot.api.sendPhoto(chat, new InputFile(photo, `order-${o.id}.jpg`), extra)
+            .catch(() => bot.api.sendDocument(chat, new InputFile(photo, `order-${o.id}.jpg`), extra));
+          fileId ??= ('photo' in m ? m.photo?.at(-1)?.file_id : m.document?.file_id) ?? null;
         } else {
           await bot.api.sendMessage(chat, `${caption}\n\nЧек не приложен.`, { parse_mode: 'HTML', reply_markup: kb });
         }
+        delivered += 1;
       });
+      if (admins.length && !delivered) throw new Error('чек не дошёл ни до одного админа');
       return fileId;
     },
     async orderPaid(o) {

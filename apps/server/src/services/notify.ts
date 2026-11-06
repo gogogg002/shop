@@ -5,7 +5,10 @@ import type { AccessMode, DeliveryType, Order } from '@prisma/client';
  * Реализацию на grammY подставляет bot/index.ts, в тестах — заглушка.
  */
 export interface Notifier {
-  /** Новая ручная оплата с чеком: шлёт админам фото с кнопками, возвращает file_id фото */
+  /**
+   * Новая ручная оплата с чеком: шлёт админам фото с кнопками, возвращает file_id фото.
+   * Бросает ошибку, если чек не дошёл ни до одного админа: тогда заказ не должен уходить «на проверку»
+   */
   manualPaymentProof(order: OrderView, photo: Buffer | null): Promise<string | null>;
   /** Заказ оплачен и ждёт ручной выдачи */
   orderPaid(order: OrderView): Promise<void>;

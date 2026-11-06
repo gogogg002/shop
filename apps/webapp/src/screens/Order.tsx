@@ -28,8 +28,9 @@ export function Order({ id }: { id: number }) {
     try {
       const form = new FormData();
       if (photo) form.append('file', photo);
-      await api(`/api/orders/${id}/proof`, { method: 'POST', form });
-      toast('Отправили на проверку. Обычно это занимает до 15 минут');
+      const r = await api<{ status: string }>(`/api/orders/${id}/proof`, { method: 'POST', form });
+      // Админ мог решить, пока чек ещё уходил другим админам: тогда новый статус покажет сам заказ
+      if (r.status === 'AWAITING_CONFIRMATION') toast('Отправили на проверку. Обычно это занимает до 15 минут');
       reload();
     } catch (e) {
       toast((e as Error).message, true);
@@ -97,7 +98,13 @@ export function Order({ id }: { id: number }) {
         </div>
       )}
 
-      {o.manual && (o.status === 'PENDING_PAYMENT' || o.status === 'AWAITING_CONFIRMATION' || o.status === 'REJECTED') && (
+      {o.manual && o.status === 'REJECTED' && (
+        <div className="row" style={{ background: 'rgba(255,90,90,.1)', borderRadius: 14, padding: 12, color: 'var(--bad)', fontSize: 14, lineHeight: 1.45 }}>
+          Оплата отклонена, причина в чате ниже. Если вы точно перевели деньги, напишите туда, разберёмся.
+        </div>
+      )}
+
+      {o.manual && (o.status === 'PENDING_PAYMENT' || o.status === 'AWAITING_CONFIRMATION') && (
         <div className="card pad col" style={{ gap: 12 }}>
           <div className="cap">{o.manual.method === 'UAH' ? 'Перевод на карту' : 'Перевод по СБП'}</div>
           <div className="between" style={{ alignItems: 'flex-end' }}>

@@ -4,7 +4,7 @@ import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
 import { notifier, type OrderView } from './notify.js';
 import { normalizePhone } from './phone.js';
-import { orderTitle, cleanText } from './labels.js';
+import { STATUS_WORD, cleanText, orderTitle } from './labels.js';
 
 export class ShopError extends Error {
   constructor(public code: string, message: string, public status = 400) {
@@ -158,16 +158,22 @@ export async function submitProof(orderId: number, userId: number, photo: Buffer
   const text = cleanText(note ?? '').trim();
   if (text.length > 2000) throw new ShopError('too_long', 'Подпись к чеку длиннее 2000 символов');
 
-  // Статус меняем до уведомления и только из «ждёт оплаты». Фото уходит админам по очереди, и первый из них
-  // может подтвердить или отклонить оплату, пока оно грузится остальным: это решение нельзя затирать
+  // Сначала чек уходит админам, и только потом заказ встаёт «на проверку»: если чек не дошёл ни до кого или сервер
+  // перезапустился посреди отправки, заказ остаётся «ждёт оплаты», и покупатель может отправить чек ещё раз
+  let fileId: string | null;
+  try {
+    fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
+  } catch (e) {
+    console.error('proof notify failed', (e as Error).message);
+    throw new ShopError('notify_failed', 'Не удалось передать чек админам. Попробуйте ещё раз через минуту', 503);
+  }
+  // Фото уходит админам по очереди, и первый может подтвердить или отклонить оплату, пока оно грузится остальным:
+  // статус меняем только из «ждёт оплаты» и «на проверке», чтобы не затереть это решение
   const moved = await prisma.order.updateMany({
     where: { id: orderId, userId, status: { in: ['PENDING_PAYMENT', 'AWAITING_CONFIRMATION'] } },
-    data: { status: 'AWAITING_CONFIRMATION' },
+    data: { status: 'AWAITING_CONFIRMATION', ...(fileId ? { proofFileId: fileId } : {}) },
   });
-  if (!moved.count) throw new ShopError('bad_state', 'Заказ уже обработан');
-
-  const fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
-  if (fileId) await prisma.order.update({ where: { id: orderId }, data: { proofFileId: fileId } });
+  if (!moved.count && fileId) await prisma.order.update({ where: { id: orderId }, data: { proofFileId: fileId } });
   if (text) await addMessage(orderId, { userId, text, fromAdmin: false });
   return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 }
@@ -219,6 +225,11 @@ export async function confirmManual(orderId: number) {
   const order = await loadOrder(orderId);
   if (!order) throw new ShopError('not_found', 'Заказ не найден', 404);
   if (!isManual(order.method)) throw new ShopError('bad_state', 'Заказ не на ручной оплате');
+  // Кнопка «Подтвердить» есть у каждого админа. Повторное подтверждение оплаченного заказа ничего не меняет
+  // (двойное нажатие), а отклонённый или отменённый заказ подтвердить нельзя: админ должен узнать об этом,
+  // а не получить «Оплата подтверждена»
+  if (order.status === 'REJECTED' || order.status === 'CANCELLED' || order.status === 'REFUNDED')
+    throw new ShopError('bad_state', `Заказ уже обработан: ${STATUS_WORD[order.status]}`);
   return markPaid(orderId);
 }
 
