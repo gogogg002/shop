@@ -65,6 +65,16 @@ export type Glass = 'RED' | 'WHITE' | 'DARK';
 export type Access = 'UNSPECIFIED' | 'NO_LOGIN' | 'WITH_LOGIN';
 export type RecipientKind = 'USERNAME' | 'PHONE';
 export const accessLabel: Record<Access, string> = { UNSPECIFIED: '', NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом' };
+/** +79001234567 → «+7 900 123-45-67», +380671234567 → «+380 67 123 45 67», остальные как есть */
+export function prettyPhone(e164: string) {
+  const d = e164.replace(/^\+/, '');
+  if (/^7\d{10}$/.test(d)) return `+7 ${d.slice(1, 4)} ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
+  if (/^380\d{9}$/.test(d)) return `+380 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8, 10)} ${d.slice(10)}`;
+  return e164;
+}
+/** «Telegram Premium · со входом · 12 мес»: оба режима одного товара в заказах должны различаться */
+export const itemTitle = (product: string, access: Access, variant: string) =>
+  [product.trim(), accessLabel[access].toLowerCase(), variant].filter(Boolean).join(' · ');
 export type Method = 'CRYPTOBOT' | 'XROCKET' | 'LOLZ' | 'SBP' | 'UAH';
 export type OrderStatus = 'PENDING_PAYMENT' | 'AWAITING_CONFIRMATION' | 'PAID' | 'DELIVERED' | 'REJECTED' | 'CANCELLED' | 'REFUNDED';
 
@@ -156,6 +166,7 @@ export async function apiBlobUrl(path: string): Promise<string> {
 
 export interface AdminReview {
   id: number; orderId: number; rating: number; text: string; isHidden: boolean; createdAt: string;
+  editCount: number; activityAt: string;
   user: { tgId: string; username: string | null; firstName: string | null };
   product: { title: string; access: Access; icon: string; glass: Glass };
   order: { id: number; variant: { title: string } };
@@ -165,6 +176,6 @@ export interface AdminOrder {
   id: number; status: OrderStatus; method: Method; amount: number; cost: number; payAmount: string | null; recipient: string | null;
   createdAt: string; paidAt: string | null; deliveredText: string | null; proofFileId: string | null;
   user: { tgId: string; username: string | null; firstName: string | null };
-  variant: { title: string; product: { title: string; icon: string; glass: Glass; deliveryType: 'MANUAL' | 'CODES' } };
+  variant: { title: string; product: { title: string; icon: string; glass: Glass; deliveryType: 'MANUAL' | 'CODES'; access: Access } };
   messages?: { id: number; text: string; fromAdmin: boolean; createdAt: string }[];
 }

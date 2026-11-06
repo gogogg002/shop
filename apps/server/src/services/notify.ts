@@ -1,4 +1,4 @@
-import type { DeliveryType, Order } from '@prisma/client';
+import type { AccessMode, DeliveryType, Order } from '@prisma/client';
 
 /**
  * Всё, что сервер говорит людям в Telegram, идёт через этот интерфейс.
@@ -15,13 +15,13 @@ export interface Notifier {
   orderDelivered(order: OrderView, text: string): Promise<void>;
   /** Сообщение в чате заказа: от клиента — админам, от админа — клиенту */
   chatMessage(order: OrderView, text: string, fromAdmin: boolean): Promise<void>;
-  /** Админам: покупатель оставил новый отзыв */
+  /** Админам: покупатель оставил отзыв или изменил его (тогда есть edited с прежней оценкой и текстом) */
   newReview(review: ReviewNotice): Promise<void>;
 }
 
 export type OrderView = Order & {
   user: { tgId: bigint; username: string | null; firstName: string | null };
-  variant: { title: string; product: { title: string; deliveryType: DeliveryType } };
+  variant: { title: string; product: { title: string; deliveryType: DeliveryType; access: AccessMode } };
 };
 
 export interface ReviewNotice {
@@ -30,7 +30,10 @@ export interface ReviewNotice {
   text: string;
   product: string;
   variant: string;
+  access: AccessMode;
   author: string;
+  /** Правка уже опубликованного отзыва: что было до неё */
+  edited?: { rating: number; text: string };
 }
 
 const noop: Notifier = {

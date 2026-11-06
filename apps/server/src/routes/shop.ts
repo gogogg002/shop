@@ -5,18 +5,17 @@ import { requireUser } from '../auth/plugin.js';
 import { getSettings } from '../services/settings.js';
 import { autoProviders, isManual } from '../payments/index.js';
 import {
-  ShopError, addMessage, cancelByUser, computeTotal, createOrder, manualInstructions, submitProof,
+  ShopError, addMessage, cancelByUser, computeTotal, createOrder, manualInstructions, normalizeRecipient, submitProof,
 } from '../services/orders.js';
-import { REVIEW_TEXT_MAX, listReviews, productGroup, ratingSummary, submitReview, titleKey } from '../services/reviews.js';
+import { REVIEW_TEXT_MAX, groupOf, listReviews, productGroup, productOrder, ratingSummary, submitReview } from '../services/reviews.js';
+import { ACCESS_LABEL } from '../services/labels.js';
+import { dbId, pathId } from './ids.js';
 import type { AccessMode } from '@prisma/client';
 
 const METHODS = ['CRYPTOBOT', 'XROCKET', 'LOLZ', 'SBP', 'UAH'] as const;
 
 /** Вкладки одного товара: сначала «Без входа», потом «Со входом» */
 const ACCESS_ORDER: Record<AccessMode, number> = { NO_LOGIN: 0, WITH_LOGIN: 1, UNSPECIFIED: 2 };
-const ACCESS_LABEL: Record<AccessMode, string> = { NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом', UNSPECIFIED: '' };
-const groupKey = (p: { id: number; title: string; access: AccessMode }) =>
-  p.access === 'UNSPECIFIED' ? `id:${p.id}` : `t:${titleKey(p.title)}`;
 
 /** Какие методы реально можно выбрать: включены в админке и настроены */
 async function availableMethods() {
@@ -48,18 +47,21 @@ export async function shopRoutes(app: FastifyInstance) {
       include: {
         products: {
           where: { isActive: true },
-          orderBy: [{ sort: 'asc' }, { id: 'asc' }],
+          orderBy: productOrder,
           include: { variants: { where: { isActive: true }, orderBy: { sort: 'asc' } } },
         },
       },
     });
     return categories
       .map((c) => {
-        // Товары с одинаковым названием и разным режимом входа — одна карточка с вкладками
-        const groups = new Map<string, typeof c.products>();
-        for (const p of c.products.filter((x) => x.variants.length)) {
-          const k = groupKey(p);
-          groups.set(k, [...(groups.get(k) ?? []), p]);
+        // Товары с одинаковым названием и разным режимом входа — одна карточка с вкладками.
+        // По одному товару на режим: дубль того же режима идёт отдельной карточкой (как и на странице товара)
+        const listed = c.products.filter((x) => x.variants.length);
+        const groups = new Map<number, typeof listed>();
+        for (const p of listed) {
+          const g = groupOf(p, listed);
+          if (!g) groups.set(p.id, [p]);
+          else if (!groups.has(g[0].id)) groups.set(g[0].id, g);
         }
         const products = [...groups.values()].map((g) => {
           const sorted = [...g].sort((a, b) => ACCESS_ORDER[a.access] - ACCESS_ORDER[b.access]);
@@ -80,7 +82,7 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/products/:id', async (req) => {
-    const id = Number((req.params as { id: string }).id);
+    const id = pathId(req, 'Товар не найден');
     const p = await prisma.product.findFirst({
       where: { id, isActive: true },
       include: { variants: { where: { isActive: true }, orderBy: { sort: 'asc' } }, category: true },
@@ -119,13 +121,14 @@ export async function shopRoutes(app: FastifyInstance) {
   /** Отзывы на витрине: все или по товару (вместе с его вкладками «Без входа / Со входом») */
   app.get('/api/reviews', async (req) => {
     const q = z.object({
-      productId: z.coerce.number().int().positive().optional(),
+      productId: dbId.optional(),
       limit: z.coerce.number().int().min(0).max(50).default(20),
-      before: z.coerce.number().int().positive().optional(),
+      before: dbId.optional(),
     }).parse(req.query);
     let productIds: number[] | undefined;
     if (q.productId) {
-      const p = await prisma.product.findUnique({ where: { id: q.productId } });
+      // Скрытый товар не отдаём и здесь: его страница тоже 404
+      const p = await prisma.product.findFirst({ where: { id: q.productId, isActive: true } });
       if (!p) throw new ShopError('not_found', 'Товар не найден', 404);
       productIds = await productGroup(p);
     }
@@ -137,7 +140,9 @@ export async function shopRoutes(app: FastifyInstance) {
     };
   });
 
-  const quoteBody = z.object({ variantId: z.number().int(), method: z.enum(METHODS), promoCode: z.string().optional() });
+  const quoteBody = z.object({
+    variantId: z.number().int(), method: z.enum(METHODS), promoCode: z.string().optional(), recipient: z.string().max(40).optional(),
+  });
   app.post('/api/orders/quote', async (req) => {
     const b = quoteBody.parse(req.body);
     const s = await getSettings();
@@ -151,6 +156,9 @@ export async function shopRoutes(app: FastifyInstance) {
     }
     return {
       price: v.price, title: v.product.title, variant: v.title, icon: v.product.icon, glass: v.product.glass,
+      // получатель в том виде, в каком его сохранит заказ (null — не разобрали)
+      recipientKind: v.product.recipientKind,
+      recipient: v.product.needsRecipient ? normalizeRecipient(v.product.recipientKind, b.recipient) : null,
       ...computeTotal(v.price, s.fees[b.method] ?? 0, promo),
     };
   });
@@ -184,7 +192,7 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/orders/:id', async (req) => {
-    const id = Number((req.params as { id: string }).id);
+    const id = pathId(req, 'Заказ не найден');
     const o = await prisma.order.findFirst({
       where: { id, userId: req.user.id },
       include: { variant: { include: { product: true } }, messages: { orderBy: { id: 'asc' } }, review: true },
@@ -206,7 +214,7 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/orders/:id/proof', async (req) => {
-    const id = Number((req.params as { id: string }).id);
+    const id = pathId(req, 'Заказ не найден');
     let photo: Buffer | null = null;
     let note = '';
     if (req.isMultipart()) {
@@ -222,7 +230,7 @@ export async function shopRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/orders/:id/cancel', async (req) => {
-    const id = Number((req.params as { id: string }).id);
+    const id = pathId(req, 'Заказ не найден');
     const o = await cancelByUser(id, req.user.id);
     return { id: o!.id, status: o!.status };
   });
@@ -232,7 +240,7 @@ export async function shopRoutes(app: FastifyInstance) {
     text: z.string().max(REVIEW_TEXT_MAX * 2).optional(),
   });
   app.post('/api/orders/:id/review', async (req) => {
-    const id = Number((req.params as { id: string }).id);
+    const id = pathId(req, 'Заказ не найден');
     const b = reviewBody.parse(req.body);
     const r = await submitReview(id, req.user.id, b);
     return { rating: r.rating, text: r.text, createdAt: r.createdAt };
@@ -240,7 +248,7 @@ export async function shopRoutes(app: FastifyInstance) {
 
   const msgBody = z.object({ text: z.string().trim().min(1).max(2000) });
   app.post('/api/orders/:id/messages', async (req) => {
-    const id = Number((req.params as { id: string }).id);
+    const id = pathId(req, 'Заказ не найден');
     const o = await prisma.order.findFirst({ where: { id, userId: req.user.id } });
     if (!o) throw new ShopError('not_found', 'Заказ не найден', 404);
     const m = await addMessage(id, { userId: req.user.id, text: msgBody.parse(req.body).text, fromAdmin: false });

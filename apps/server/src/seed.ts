@@ -1,7 +1,11 @@
-/** Демо-каталог, чтобы мини-апп не был пустым. Цены в копейках. Запуск: pnpm db:seed (повторный запуск ничего не дублирует) */
+/**
+ * Демо-каталог, чтобы мини-апп не был пустым. Цены в копейках. Запуск: pnpm db:seed.
+ * Повторный запуск и запуск на базе со старым каталогом (без режимов входа) ничего не дублируют.
+ */
+import { pathToFileURL } from 'node:url';
 import type { AccessMode } from '@prisma/client';
 import { prisma } from './db.js';
-import { premiumModes, premiumVariants } from './catalog-data.js';
+import { syncTelegramPremium } from './catalog-sync.js';
 import { getSettings, saveSettings } from './services/settings.js';
 
 const R = (rub: number) => rub * 100;
@@ -29,27 +33,22 @@ const catalog: { slug: string; title: string; products: P[] }[] = [
   ] },
 ];
 
-async function main() {
+export async function seedCatalog() {
   const s = await getSettings();
   if (!s.supportUsername) await saveSettings({ supportUsername: 'TimaGopl' });
 
   for (const [ci, c] of catalog.entries()) {
     const cat = await prisma.category.upsert({ where: { slug: c.slug }, create: { slug: c.slug, title: c.title, sort: ci }, update: {} });
 
-    if (c.slug === 'telegram') {
-      for (const m of premiumModes) {
-        if (await prisma.product.findFirst({ where: { title: 'Telegram Premium', access: m.access } })) continue;
-        await prisma.product.create({
-          data: {
-            categoryId: cat.id, title: 'Telegram Premium', icon: 'star', glass: 'RED', sort: 0, wholesale: true, ...m,
-            variants: { create: premiumVariants },
-          },
-        });
-      }
-    }
+    if (c.slug === 'telegram') await syncTelegramPremium(cat.id);
 
     for (const [pi, p] of c.products.entries()) {
-      if (await prisma.product.findFirst({ where: { title: p.title, access: p.access ?? 'UNSPECIFIED' } })) continue;
+      // Ищем по названию в категории при любом режиме: у товаров из старого сида режима ещё нет
+      const exists = await prisma.product.findFirst({ where: { categoryId: cat.id, title: p.title }, orderBy: { id: 'asc' } });
+      if (exists) {
+        if (exists.access === 'UNSPECIFIED' && p.access) await prisma.product.update({ where: { id: exists.id }, data: { access: p.access } });
+        continue;
+      }
       await prisma.product.create({
         data: {
           categoryId: cat.id, title: p.title, subtitle: p.subtitle, icon: p.icon, glass: p.glass, sort: pi + 1,
@@ -62,7 +61,11 @@ async function main() {
       });
     }
   }
-  console.log('Каталог заполнен');
 }
 
-main().finally(() => prisma.$disconnect());
+// Запуск как скрипт (pnpm db:seed, node dist/seed.js); при импорте из тестов ничего не делает
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  seedCatalog()
+    .then(() => console.log('Каталог заполнен'))
+    .finally(() => prisma.$disconnect());
+}

@@ -6,12 +6,14 @@ import { config } from '../config.js';
 import { requireAdmin } from '../auth/plugin.js';
 import { getSettings, saveSettings } from '../services/settings.js';
 import { ShopError, addMessage, confirmManual, deliver, rejectManual } from '../services/orders.js';
+import { dbId, pathId } from './ids.js';
 
-const idParam = (req: { params: unknown }) => Number((req.params as { id: string }).id);
+const idParam = (req: { params: unknown }) => pathId(req);
 
 const orderView = {
   user: { select: { tgId: true, username: true, firstName: true } },
-  variant: { include: { product: { select: { title: true, icon: true, glass: true, deliveryType: true } } } },
+  // access нужен, чтобы в очереди «Со входом» не путался с «Без входа»: у них одно название
+  variant: { include: { product: { select: { title: true, icon: true, glass: true, deliveryType: true, access: true } } } },
 } as const;
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -175,16 +177,23 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/reviews', async (req) => {
     const q = z.object({
       filter: z.enum(['all', 'visible', 'hidden', 'low']).default('all'),
-      before: z.coerce.number().int().positive().optional(),
+      before: dbId.optional(),
+      at: z.coerce.date().min(new Date('2000-01-01T00:00:00Z')).max(new Date('9999-12-31T23:59:59Z')).optional(),
     }).parse(req.query);
     const where = {
       ...(q.filter === 'visible' ? { isHidden: false } : q.filter === 'hidden' ? { isHidden: true } : {}),
       ...(q.filter === 'low' ? { rating: { lte: 3 } } : {}),
-      ...(q.before ? { id: { lt: q.before } } : {}),
     };
+    // Сверху новые и только что изменённые покупателем. before и at — id и время последнего отзыва прошлой страницы:
+    // следующая страница начинается строго после него в том же порядке (activityAt, id). Время берём из страницы,
+    // а не из базы: если покупатель успел изменить этот отзыв, он уехал наверх, и страница иначе повторилась бы
+    const after = !q.before ? null
+      : q.at ? { id: q.before, activityAt: q.at }
+      : await prisma.review.findUnique({ where: { id: q.before }, select: { id: true, activityAt: true } });
+    const page = after ? { OR: [{ activityAt: { lt: after.activityAt } }, { activityAt: after.activityAt, id: { lt: after.id } }] } : {};
     const [items, all, visible] = await Promise.all([
-      prisma.review.findMany({
-        where, orderBy: { id: 'desc' }, take: 50,
+      q.before && !after ? Promise.resolve([]) : prisma.review.findMany({
+        where: { ...where, ...page }, orderBy: [{ activityAt: 'desc' }, { id: 'desc' }], take: 50,
         include: {
           user: { select: { tgId: true, username: true, firstName: true } },
           product: { select: { title: true, access: true, icon: true, glass: true } },
@@ -200,6 +209,7 @@ export async function adminRoutes(app: FastifyInstance) {
       visible,
       avg: all._count._all ? Math.round((all._avg.rating ?? 0) * 10) / 10 : 0,
       nextBefore: items.length === 50 ? items[items.length - 1].id : null,
+      nextAt: items.length === 50 ? items[items.length - 1].activityAt : null,
     };
   });
   app.patch('/api/admin/reviews/:id', async (req) => {

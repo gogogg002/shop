@@ -73,4 +73,16 @@ cp .env.example .env   # заполнить BOT_TOKEN, ADMIN_IDS, DOMAIN, PUBLIC
 SEED=1 bash deploy/install.sh   # SEED=1 только при первом запуске: демо-каталог
 ```
 
+### Обновление и откат
+
+```bash
+mkdir -p ~/krynel-backups
+docker compose -p krynel exec -T db pg_dump -U krynel krynel | gzip > ~/krynel-backups/before-$(date +%Y%m%d-%H%M).sql.gz
+git pull && docker compose -p krynel up -d --build db app
+```
+
+Схема базы применяется сама при старте контейнера (`prisma db push`), новые поля всегда со значениями по умолчанию. Перед обновлением со сменой схемы снимайте бэкап, как выше.
+
+Откат: старый код работает на новой схеме, но его `db push` захочет удалить новые таблицы и колонки, и контейнер не запустится. Поэтому при откате добавьте `SKIP_DB_PUSH=1` в `.env`, а после возврата на свежую версию уберите. Образы старше этой версии флаг не знают: для них остановите приложение (`docker compose -p krynel stop app`) и запустите старый образ без `db push`: `docker compose -p krynel run -d --service-ports --name krynel-rollback app node dist/index.js`. Либо восстановите бэкап.
+
 Нет своего домена: `DOMAIN=95-215-32-54.sslip.io`, `PUBLIC_URL=https://95-215-32-54.sslip.io` (IP через дефисы). Caddy сам выпустит HTTPS-сертификат, порты 80 и 443 должны быть открыты. Свой Telegram ID показывает команда бота `/id`.

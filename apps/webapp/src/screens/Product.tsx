@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, openTelegramChat, ratingText, reviewsWord, rub, type ProductView } from '../api';
+import { api, openTelegramChat, prettyPhone, ratingText, reviewsWord, rub, type ProductView } from '../api';
+import { normalizePhone } from '../phone';
 import { Icon, Key, useLoad } from '../ui/kit';
 import { ReviewCard } from '../ui/ReviewCard';
 import { go, swap, useMe } from '../App';
@@ -14,7 +15,8 @@ const recipientSpec = {
   },
   PHONE: {
     label: 'Номер телефона аккаунта Telegram', placeholder: '+7 900 123-45-67', inputMode: 'tel' as const,
-    ok: (v: string) => /^\d{10,15}$/.test(v.replace(/[\s()\-.+]/g, '')), hint: 'Укажите номер телефона',
+    // так же, как сервер: номер без кода страны, который нельзя понять однозначно, не пропускаем
+    ok: (v: string) => normalizePhone(v) !== null, hint: 'Укажите номер с кодом страны',
   },
 };
 
@@ -110,6 +112,12 @@ export function Product({ id }: { id: number }) {
           <input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder={spec.placeholder}
             autoCapitalize="off" autoCorrect="off" inputMode={spec.inputMode} autoComplete={p.recipientKind === 'PHONE' ? 'tel' : 'off'} />
         </label>
+      )}
+      {!bulk && p.needsRecipient && p.recipientKind === 'PHONE' && (recipientOk || recipient.replace(/\D/g, '').length >= 10) && (
+        // Показываем, как поняли номер: «900 123-45-67» станет +7, украинский «067…» станет +380
+        <p className="small" style={{ marginTop: -8, color: recipientOk ? 'var(--m)' : 'var(--warn)' }} aria-live="polite">
+          {recipientOk ? `Номер: ${prettyPhone(normalizePhone(recipient)!)}` : 'Не похоже на номер. Укажите код страны, например +7 900 123-45-67'}
+        </p>
       )}
 
       {!bulk && p.access === 'WITH_LOGIN' && (

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, copy, methodLabel, openPay, rub, statusLabel, type OrderView } from '../api';
+import { api, copy, itemTitle, methodLabel, openPay, prettyPhone, rub, statusLabel, type OrderView } from '../api';
 import { Icon, Key, Stars, useLoad, useToast } from '../ui/kit';
 import { go } from '../App';
 import { Chat } from '../ui/Chat';
@@ -57,8 +57,8 @@ export function Order({ id }: { id: number }) {
       <div className="card pad row">
         <Key icon={o.icon} glass={o.glass} size={50} />
         <div className="sp">
-          <div style={{ fontWeight: 600, fontSize: 16 }}>{o.product} · {o.variant}</div>
-          <div className="muted small">{o.recipient ? `для ${o.recipient} · ` : ''}{methodLabel[o.method].title}</div>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>{itemTitle(o.product, o.access, o.variant)}</div>
+          <div className="muted small">{o.recipient ? `для ${prettyPhone(o.recipient)} · ` : ''}{methodLabel[o.method].title}</div>
         </div>
         <b>{rub(o.amount)}</b>
       </div>

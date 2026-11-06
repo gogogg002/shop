@@ -41,9 +41,28 @@ function useHash() {
 export const go = (to: string) => {
   location.hash = to;
 };
+
+/**
+ * Первая запись истории мини-аппа помечена: с неё «Назад» некуда, и мы уходим на экран-родитель.
+ * history.length для этого не годится: он считает и записи «вперёд», а не текущую позицию.
+ */
+const ROOT = 'krynelRoot';
+const isRoot = () => Boolean((history.state as Record<string, unknown> | null)?.[ROOT]);
+const markRoot = () => history.replaceState({ ...((history.state as object | null) ?? {}), [ROOT]: true }, '');
+// Запись, с которой открыли мини-апп (или перезагрузили страницу), считаем первой
+if (!isRoot()) markRoot();
+
 /** Переход без новой записи в истории (вкладки товара): «Назад» ведёт туда, откуда пришли */
 export const swap = (to: string) => {
+  const root = isRoot();
   location.replace(`#${to}`);
+  if (root) markRoot();
+};
+
+/** «Назад» внутри мини-аппа: на прошлый экран, а если открыли сразу здесь (кнопка из бота), на экран-родитель */
+export const back = () => {
+  if (isRoot()) swap(parentOf(parseHash(location.hash).path));
+  else history.back();
 };
 
 function parentOf(path: string) {
@@ -90,8 +109,6 @@ export function App() {
   useEffect(() => {
     if (!tg) return;
     const nested = !['/', '/orders', '/admin', '/admin/orders', '/admin/products', '/admin/reviews', '/admin/settings'].includes(path);
-    // Открыли сразу на вложенном экране (кнопка из бота): истории нет, идём к «родителю»
-    const back = () => (history.length > 1 ? history.back() : go(parentOf(path)));
     if (nested) {
       tg.BackButton.show();
       tg.BackButton.onClick(back);

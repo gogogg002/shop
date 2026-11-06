@@ -1,25 +1,51 @@
-import { useState } from 'react';
-import { api, accessLabel, ratingText, shortDate, type AdminReview } from '../api';
+import { useRef, useState } from 'react';
+import { api, itemTitle, ratingText, shortDate, type AdminReview } from '../api';
 import { Key, Stars, Toggle, useLoad, useToast } from '../ui/kit';
 
-interface Page { items: AdminReview[]; total: number; visible: number; avg: number; nextBefore: number | null }
+interface Page { items: AdminReview[]; total: number; visible: number; avg: number; nextBefore: number | null; nextAt: string | null }
 
 const FILTERS = [['all', 'Все'], ['low', '1–3 ★'], ['visible', 'На витрине'], ['hidden', 'Скрытые']] as const;
+type Filter = (typeof FILTERS)[number][0];
 
 export function AdminReviews() {
-  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
+  const [filter, setFilter] = useState<Filter>('all');
   const { data, error, setData } = useLoad(() => api<Page>(`/api/admin/reviews?filter=${filter}`), [filter]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Страница, догруженная для старого фильтра, не должна дописаться в список нового
+  const current = useRef(filter);
+  current.current = filter;
   const toast = useToast();
 
+  const patchItem = (id: number, isHidden: boolean) =>
+    setData((d) => d && { ...d, items: d.items.map((x) => (x.id === id ? { ...x, isHidden } : x)) });
+
   async function toggle(r: AdminReview, visible: boolean) {
-    const prev = data!;
-    setData({ ...prev, items: prev.items.map((x) => (x.id === r.id ? { ...x, isHidden: !visible } : x)) });
+    patchItem(r.id, !visible);
     try {
       await api(`/api/admin/reviews/${r.id}`, { method: 'PATCH', body: { isHidden: !visible } });
       toast(visible ? 'Отзыв снова на витрине' : 'Отзыв скрыт с витрины');
     } catch (e) {
       toast((e as Error).message, true);
-      setData(prev);
+      patchItem(r.id, r.isHidden);
+    }
+  }
+
+  async function more() {
+    if (!data?.nextBefore || !data.nextAt || loadingMore) return;
+    const f = filter;
+    setLoadingMore(true);
+    try {
+      const next = await api<Page>(`/api/admin/reviews?filter=${f}&before=${data.nextBefore}&at=${encodeURIComponent(data.nextAt)}`);
+      if (current.current !== f) return;
+      setData((d) => {
+        if (!d) return d;
+        const have = new Set(d.items.map((x) => x.id));
+        return { ...next, items: [...d.items, ...next.items.filter((x) => !have.has(x.id))] };
+      });
+    } catch (e) {
+      toast((e as Error).message, true);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -32,7 +58,11 @@ export function AdminReviews() {
       </div>
       <div className="row" style={{ gap: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
         {FILTERS.map(([k, t]) => (
-          <button key={k} className={`pill ${filter === k ? 'solid' : 'm'}`} style={{ height: 32, padding: '0 14px', fontSize: 13.5 }} onClick={() => setFilter(k)}>{t}</button>
+          <button key={k} className={`pill ${filter === k ? 'solid' : 'm'}`} style={{ height: 32, padding: '0 14px', fontSize: 13.5 }} onClick={() => {
+            if (k === filter) return;
+            setData(null); // список и «Показать ещё» старого фильтра не показываем, пока грузится новый
+            setFilter(k);
+          }}>{t}</button>
         ))}
       </div>
       {error && <div className="empty">{error}</div>}
@@ -46,13 +76,16 @@ export function AdminReviews() {
             <div className="row" style={{ gap: 12 }}>
               <Key icon={r.product.icon} glass={r.product.glass} size={40} />
               <div className="sp" style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }} className="ellipsis">
-                  {r.product.title} · {r.order.variant.title}{accessLabel[r.product.access] ? ` · ${accessLabel[r.product.access].toLowerCase()}` : ''}
+                <div style={{ fontWeight: 600 }} className="ellipsis">{itemTitle(r.product.title, r.product.access, r.order.variant.title)}</div>
+                <div className="muted small ellipsis">
+                  {buyer} · <a href={`#/admin/orders/${r.orderId}`} style={{ color: 'var(--a2)' }}>заказ №{r.orderId}</a> · {shortDate(r.createdAt)}
                 </div>
-                <div className="muted small ellipsis">{buyer} · <a href={`#/admin/orders/${r.orderId}`} style={{ color: 'var(--a2)' }}>заказ №{r.orderId}</a> · {shortDate(r.createdAt)}</div>
               </div>
             </div>
-            <Stars value={r.rating} size={18} />
+            <div className="between">
+              <Stars value={r.rating} size={18} />
+              {r.editCount > 0 && <span className="small" style={{ color: 'var(--warn)' }}>изменён {shortDate(r.activityAt)}</span>}
+            </div>
             {r.text ? <p style={{ lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.text}</p> : <p className="muted small">Без текста</p>}
             <div className="between">
               <span className="small muted">{r.isHidden ? 'Скрыт с витрины' : 'Виден на витрине'}</span>
@@ -61,6 +94,10 @@ export function AdminReviews() {
           </article>
         );
       })}
+
+      {data?.nextBefore && (
+        <button className="btn ghost block sm" disabled={loadingMore} onClick={more}>{loadingMore ? 'Загружаем…' : 'Показать ещё'}</button>
+      )}
     </div>
   );
 }

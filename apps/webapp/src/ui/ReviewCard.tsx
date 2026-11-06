@@ -7,7 +7,7 @@ export function ReviewCard({ r, showProduct = false }: { r: PublicReview; showPr
     <article className="card pad review">
       <div className="between">
         <div className="row" style={{ gap: 10, minWidth: 0 }}>
-          <span className="ava" aria-hidden="true">{r.author.slice(0, 1).toUpperCase()}</span>
+          <span className="ava" aria-hidden="true">{(Array.from(r.author)[0] ?? '?').toUpperCase()}</span>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }} className="ellipsis">{r.author}</div>
             <div className="muted ellipsis" style={{ fontSize: 12.5 }}>{what}</div>

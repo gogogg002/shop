@@ -2,10 +2,11 @@ import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import { adminIds, config, isAdmin } from '../config.js';
 import { setNotifier, type Notifier, type OrderView } from '../services/notify.js';
 import { ShopError, confirmManual, deliver, loadOrder, rejectManual } from '../services/orders.js';
+import { orderTitle } from '../services/labels.js';
 
 const rub = (kop: number) => `${(kop / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`;
 const who = (o: OrderView) => (o.user.username ? `@${o.user.username}` : o.user.firstName ?? String(o.user.tgId));
-const title = (o: OrderView) => `${o.variant.product.title} · ${o.variant.title}`;
+const title = (o: OrderView) => orderTitle(o.variant.product, o.variant.title);
 const webUrl = (hash: string) => `${config.PUBLIC_URL}/#${hash}`;
 
 function orderCard(o: OrderView) {
@@ -95,8 +96,16 @@ export function startBot() {
       }).catch((e) => console.error('notify user failed', e.message));
     },
     async newReview(r) {
-      const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
-      const body = [`${stars} Новый отзыв к заказу №${r.orderId}`, `${r.product} · ${r.variant}`, `От: ${r.author}`, '', r.text || 'Без текста'].join('\n');
+      const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
+      const short = (t: string) => (Array.from(t).length > 300 ? `${Array.from(t).slice(0, 300).join('')}…` : t);
+      const body = [
+        r.edited ? `✏️ ${stars(r.rating)} Отзыв к заказу №${r.orderId} изменён` : `${stars(r.rating)} Новый отзыв к заказу №${r.orderId}`,
+        orderTitle({ title: r.product, access: r.access }, r.variant),
+        `От: ${r.author}`,
+        '',
+        r.text || 'Без текста',
+        ...(r.edited ? ['', `Было: ${stars(r.edited.rating)}${r.edited.text ? ` «${short(r.edited.text)}»` : ''}`] : []),
+      ].join('\n');
       await toAdmins((chat) => bot.api.sendMessage(chat, body, {
         reply_markup: new InlineKeyboard().webApp('Все отзывы', webUrl('/admin/reviews')).webApp('Заказ', webUrl(`/admin/orders/${r.orderId}`)),
       }));

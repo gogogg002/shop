@@ -54,16 +54,56 @@ describe('цены', () => {
 });
 
 describe('получатель', () => {
-  it('username и телефон приводятся к одному виду', async () => {
+  it('username приводится к @username', async () => {
     const { normalizeRecipient } = await import('../src/services/orders.js');
     expect(normalizeRecipient('USERNAME', 'durov')).toBe('@durov');
     expect(normalizeRecipient('USERNAME', '@du')).toBeNull();
     expect(normalizeRecipient('USERNAME', 'a b c d')).toBeNull();
-    expect(normalizeRecipient('PHONE', '+7 (900) 123-45-67')).toBe('+79001234567');
-    expect(normalizeRecipient('PHONE', '89001234567')).toBe('+79001234567');
-    expect(normalizeRecipient('PHONE', '+380 67 123 45 67')).toBe('+380671234567');
-    expect(normalizeRecipient('PHONE', '12345')).toBeNull();
     expect(normalizeRecipient('PHONE', '@durov')).toBeNull();
     expect(normalizeRecipient('PHONE', undefined)).toBeNull();
+  });
+
+  // Один и тот же набор для сервера и мини-аппа: кнопка «Оформить» и сервер должны понимать номер одинаково
+  const phones: [string, string | null][] = [
+    ['+7 (900) 123-45-67', '+79001234567'],
+    ['8 (900) 123-45-67', '+79001234567'],
+    ['89001234567', '+79001234567'],
+    ['79001234567', '+79001234567'],
+    ['900 123-45-67', '+79001234567'], // без кода страны, российский мобильный
+    ['+8 900 123 45 67', '+79001234567'], // частая опечатка вместо +7
+    ['8 701 123 45 67', '+77011234567'], // Казахстан через восьмёрку
+    ['+380 67 123 45 67', '+380671234567'],
+    ['380671234567', '+380671234567'],
+    ['067 123 45 67', '+380671234567'], // украинский номер без кода страны
+    ['+84 912 345 678', '+84912345678'], // Вьетнам: восьмёрку после «+» не трогаем
+    ['+852 6123 4567', '+85261234567'],
+    ['4915112345678', '+4915112345678'],
+    ['84912345678', null], // без «+» непонятно: Вьетнам или российский городской
+    ['123 456 78 90', null],
+    ['+0671234567', null],
+    ['+7 900 123 45 6', null], // цифры не хватает
+    ['+380 67 123 45', null],
+    ['12345', null],
+    ['+7 900 abc', null],
+    ['', null],
+  ];
+
+  it('телефон: сервер', async () => {
+    const { normalizePhone } = await import('../src/services/phone.js');
+    for (const [raw, want] of phones) expect([raw, normalizePhone(raw)]).toEqual([raw, want]);
+  });
+
+  it('телефон: мини-апп понимает номер так же', async () => {
+    const { normalizePhone } = await import('../../webapp/src/phone.js');
+    for (const [raw, want] of phones) expect([raw, normalizePhone(raw)]).toEqual([raw, want]);
+  });
+});
+
+describe('название заказа в сообщениях', () => {
+  it('с режимом входа, если он указан', async () => {
+    const { orderTitle } = await import('../src/services/labels.js');
+    expect(orderTitle({ title: 'Telegram Premium ', access: 'WITH_LOGIN' }, '12 мес')).toBe('Telegram Premium (со входом) · 12 мес');
+    expect(orderTitle({ title: 'Telegram Premium', access: 'NO_LOGIN' }, '1 мес')).toBe('Telegram Premium (без входа) · 1 мес');
+    expect(orderTitle({ title: 'ChatGPT Plus', access: 'UNSPECIFIED' }, '1 мес')).toBe('ChatGPT Plus · 1 мес');
   });
 });

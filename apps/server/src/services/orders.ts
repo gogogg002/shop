@@ -3,6 +3,8 @@ import { prisma } from '../db.js';
 import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
 import { notifier, type OrderView } from './notify.js';
+import { normalizePhone } from './phone.js';
+import { orderTitle, stripNul } from './labels.js';
 
 export class ShopError extends Error {
   constructor(public code: string, message: string, public status = 400) {
@@ -29,14 +31,8 @@ export function computeTotal(price: number, feePercent: number, promo?: { amount
  * null — если формат не подходит.
  */
 export function normalizeRecipient(kind: RecipientKind, raw: string | undefined): string | null {
-  const v = (raw ?? '').trim();
-  if (kind === 'PHONE') {
-    const digits = v.replace(/[\s()\-.]/g, '').replace(/^\+/, '');
-    if (!/^\d{10,15}$/.test(digits)) return null;
-    // российский номер с восьмёркой: 89001234567 → +79001234567
-    return '+' + (digits.length === 11 && digits.startsWith('8') ? '7' + digits.slice(1) : digits);
-  }
-  const u = v.replace(/^@?/, '@');
+  if (kind === 'PHONE') return normalizePhone(raw);
+  const u = (raw ?? '').trim().replace(/^@?/, '@');
   return /^@[A-Za-z0-9_]{4,32}$/.test(u) ? u : null;
 }
 
@@ -91,7 +87,7 @@ export async function createOrder(input: {
     throw new ShopError(
       'bad_recipient',
       variant.product.recipientKind === 'PHONE'
-        ? 'Укажите номер телефона аккаунта, например +7 900 123-45-67'
+        ? 'Укажите номер телефона аккаунта с кодом страны, например +7 900 123-45-67'
         : 'Укажите username получателя, например @durov',
     );
 
@@ -164,7 +160,7 @@ export async function submitProof(orderId: number, userId: number, photo: Buffer
     where: { id: orderId },
     data: { status: 'AWAITING_CONFIRMATION', proofFileId: fileId ?? order.proofFileId },
   });
-  if (note?.trim()) await addMessage(orderId, { userId, text: note.trim(), fromAdmin: false });
+  if (note && stripNul(note).trim()) await addMessage(orderId, { userId, text: note, fromAdmin: false });
   return updated;
 }
 
@@ -207,7 +203,7 @@ async function deliverCode(orderId: number) {
   });
   if (!done) return null;
   const order = (await loadOrder(orderId))!;
-  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен.\nКод: ${done}`);
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${orderTitle(order.variant.product, order.variant.title)}.\nКод: ${done}`);
   return order;
 }
 
@@ -233,11 +229,11 @@ export async function rejectManual(orderId: number, reason: string) {
 export async function deliver(orderId: number, text?: string) {
   const changed = await prisma.order.updateMany({
     where: { id: orderId, status: 'PAID' },
-    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text || null },
+    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text ? stripNul(text) : null },
   });
   if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
   const order = (await loadOrder(orderId))!;
-  const what = `${order.variant.product.title} · ${order.variant.title}`;
+  const what = orderTitle(order.variant.product, order.variant.title);
   await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${what}.${text ? `\n${text}` : ''}`);
   return order;
 }
@@ -252,9 +248,11 @@ export async function cancelByUser(orderId: number, userId: number) {
 }
 
 export async function addMessage(orderId: number, m: { userId?: number; text: string; fromAdmin: boolean; fileId?: string }) {
-  const msg = await prisma.message.create({ data: { orderId, ...m } });
+  const text = stripNul(m.text).trim();
+  if (!text) throw new ShopError('empty', 'Напишите сообщение');
+  const msg = await prisma.message.create({ data: { orderId, ...m, text } });
   const order = await loadOrder(orderId);
-  if (order) await notifier().chatMessage(order, m.text, m.fromAdmin);
+  if (order) await notifier().chatMessage(order, text, m.fromAdmin);
   return msg;
 }
 
