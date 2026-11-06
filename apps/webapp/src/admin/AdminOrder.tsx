@@ -77,8 +77,17 @@ export function AdminOrder({ id }: { id: number }) {
       {o.status === 'PAID' && (
         <div className="card pad col">
           <div className="cap">Выдача</div>
-          <label className="field"><span>Что передать клиенту (необязательно)</span><textarea rows={2} value={deliverText} onChange={(e) => setDeliverText(e.target.value)} placeholder="Подарок отправлен на @username" /></label>
-          <button className="btn block" disabled={busy} onClick={() => act('deliver', { text: deliverText || undefined }, 'Заказ выдан')}>Выдано</button>
+          {o.deliveredText && (
+            <div className="muted small" style={{ lineHeight: 1.45 }}>
+              Клиенту уже выдано: <b className="mono" style={{ color: 'var(--t)', wordBreak: 'break-all' }}>{o.deliveredText}</b>. Заказ в работе, пока вы не нажмёте «Завершить».
+            </div>
+          )}
+          <label className="field"><span>Что выдать клиенту: карта, код, ссылка</span><textarea rows={2} value={deliverText} onChange={(e) => setDeliverText(e.target.value)} placeholder="Карта 4441 1111 2222 3333, до 12/28" /></label>
+          <button className="btn ghost block" disabled={busy || !deliverText.trim()} onClick={() => act('issue', { text: deliverText }, 'Выдано, заказ в работе')}>
+            {o.deliveredText ? 'Выдать заново, не завершая' : 'Выдать, не завершая'}
+          </button>
+          <button className="btn block" disabled={busy} onClick={() => act('deliver', { text: deliverText.trim() || undefined }, 'Заказ завершён')}>Завершить заказ</button>
+          <div className="muted small" style={{ lineHeight: 1.45 }}>После «Завершить» клиенту придёт пуш, и он сможет оставить отзыв.</div>
         </div>
       )}
 

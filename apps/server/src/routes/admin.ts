@@ -5,7 +5,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { requireAdmin } from '../auth/plugin.js';
 import { getSettings, saveSettings } from '../services/settings.js';
-import { ShopError, addMessage, confirmManual, deliver, rejectManual } from '../services/orders.js';
+import { ShopError, addMessage, confirmManual, deliver, issue, rejectManual } from '../services/orders.js';
 import { bodyId, dbId, int4, pathId } from './ids.js';
 
 const idParam = (req: { params: unknown }) => pathId(req);
@@ -86,6 +86,10 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/api/admin/orders/:id/deliver', async (req) => {
     const { text } = z.object({ text: z.string().max(2000).optional() }).parse(req.body ?? {});
     return deliver(idParam(req), text);
+  });
+  app.post('/api/admin/orders/:id/issue', async (req) => {
+    const { text } = z.object({ text: z.string().trim().min(1).max(2000) }).parse(req.body);
+    return issue(idParam(req), text);
   });
   app.post('/api/admin/orders/:id/messages', async (req) => {
     const { text } = z.object({ text: z.string().trim().min(1).max(2000) }).parse(req.body);

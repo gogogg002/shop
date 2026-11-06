@@ -59,7 +59,7 @@ export function startBot() {
       if (action === 'ok') await confirmManual(id);
       if (action === 'no') await rejectManual(id, 'перевод не найден, напишите в чат заказа');
       if (action === 'dlv') await deliver(id);
-      const label = { ok: '✅ Оплата подтверждена', no: '❌ Оплата отклонена', dlv: '✅ Выдано' }[action as 'ok' | 'no' | 'dlv'];
+      const label = { ok: '✅ Оплата подтверждена', no: '❌ Оплата отклонена', dlv: '✅ Заказ завершён' }[action as 'ok' | 'no' | 'dlv'];
       await ctx.answerCallbackQuery({ text: label });
       await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard().text(label, 'noop') }).catch(() => {});
     } catch (e) {
@@ -95,7 +95,8 @@ export function startBot() {
       return fileId;
     },
     async orderPaid(o) {
-      const kb = new InlineKeyboard().text('✅ Выдано', `dlv:${o.id}`).webApp('Открыть', webUrl(`/admin/orders/${o.id}`));
+      // Выдать данные (карту, код) — в заказе; «Завершить» сразу закрывает заказ и просит отзыв
+      const kb = new InlineKeyboard().webApp('📦 Выдать данные', webUrl(`/admin/orders/${o.id}`)).text('✅ Завершить', `dlv:${o.id}`);
       await toAdmins((chat) => bot.api.sendMessage(chat, `💰 Оплачен, нужно выдать\n\n${orderCard(o)}`, { parse_mode: 'HTML', reply_markup: kb }));
     },
     async orderStatusToUser(o, text) {

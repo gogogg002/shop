@@ -26,7 +26,8 @@ export function Order({ id }: { id: number }) {
   // бы ошибкой, и вместе с чатом пропал бы недописанный текст
   if (!o) return <div className="page">{error ? <div className="empty">{error}</div> : <div className="skeleton" style={{ height: 300 }} />}</div>;
 
-  const st = statusLabel[o.status];
+  // Данные уже выданы, но заказ не завершён: «В работе», а не «Выдаём»
+  const st = o.status === 'PAID' && o.deliveredText ? { text: 'В работе', tone: 'warn' as const } : statusLabel[o.status];
 
   async function sendProof() {
     setBusy('proof');
@@ -82,9 +83,9 @@ export function Order({ id }: { id: number }) {
         <b>{rub(o.amount)}</b>
       </div>
 
-      {o.status === 'DELIVERED' && o.deliveredText && (
+      {(o.status === 'DELIVERED' || o.status === 'PAID') && o.deliveredText && (
         <div className="card pad col">
-          <div className="cap">Выдано</div>
+          <div className="cap">{o.status === 'DELIVERED' ? 'Выдано' : 'Выдано · заказ ещё в работе'}</div>
           <div className="row" style={{ background: '#0c0c0e', borderRadius: 14, padding: '8px 8px 8px 14px' }}>
             <span className="sp mono" style={{ fontSize: 15, wordBreak: 'break-all' }}>{o.deliveredText}</span>
             <button className="btn icon sm" onClick={() => copyText(o.deliveredText!)} aria-label="Копировать"><Icon name="copy" size={18} /></button>

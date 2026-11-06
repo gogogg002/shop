@@ -279,15 +279,34 @@ export async function rejectManual(orderId: number, reason: string) {
   return order;
 }
 
+/**
+ * Выдать данные (карту, код, ссылку), не завершая заказ: клиент видит их в заказе и получает в бот,
+ * а заказ остаётся «оплачен» до кнопки «Завершить». Можно выдать ещё раз, текст заменится.
+ */
+export async function issue(orderId: number, text: string) {
+  const clean = cleanText(text).trim();
+  if (!clean) throw new ShopError('bad_text', 'Напишите, что выдать клиенту');
+  const changed = await prisma.order.updateMany({ where: { id: orderId, status: 'PAID' }, data: { deliveredText: clean } });
+  if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
+  const order = (await loadOrder(orderId))!;
+  await notifier().orderStatusToUser(
+    order,
+    `📦 По заказу №${order.id} выдано:\n${clean}\n\nЗаказ ещё в работе. Когда всё будет готово, мы его завершим.`,
+  );
+  return order;
+}
+
+/** Завершить заказ: «выдан», клиенту пуш с просьбой оставить отзыв. Без нового текста остаётся выданный раньше */
 export async function deliver(orderId: number, text?: string) {
+  const clean = text ? cleanText(text).trim() : '';
   const changed = await prisma.order.updateMany({
     where: { id: orderId, status: 'PAID' },
-    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text ? cleanText(text) : null },
+    data: { status: 'DELIVERED', deliveredAt: new Date(), ...(clean ? { deliveredText: clean } : {}) },
   });
   if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
   const order = (await loadOrder(orderId))!;
   const what = orderTitle(order.variant.product, variantLabel(order.variant, order.quantity));
-  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${what}.${text ? `\n${text}` : ''}`);
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${what}.${clean ? `\n${clean}` : ''}`);
   return order;
 }
 

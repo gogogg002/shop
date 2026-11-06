@@ -113,6 +113,29 @@ describe('ручная оплата гривнами', () => {
     expect((await api(ADMIN).post(`/api/admin/orders/${id}/deliver`)).statusCode).toBe(400);
   });
 
+  it('выдать данные без завершения: заказ в работе, отзыв только после «Завершить»', async () => {
+    const id = (await api(CLIENT).post('/api/orders', { variantId: premiumVariant, method: 'UAH', recipient: '@tymur_dev' })).json().id;
+    await api(CLIENT).post(`/api/orders/${id}/proof`, {});
+    await api(ADMIN).post(`/api/admin/orders/${id}/confirm`);
+
+    const i = await api(ADMIN).post(`/api/admin/orders/${id}/issue`, { text: 'Карта 4441 1111 2222 3333' });
+    expect(i.json()).toMatchObject({ status: 'PAID', deliveredText: 'Карта 4441 1111 2222 3333' });
+    expect(sent.some((m) => m.startsWith(`user:${id}:📦 По заказу №${id} выдано:
+Карта 4441`))).toBe(true);
+    expect(sent.some((m) => m.startsWith(`delivered:${id}:`))).toBe(false);
+    // клиент видит выданное, но отзыв пока нельзя
+    const view = (await api(CLIENT).get(`/api/orders/${id}`)).json();
+    expect(view).toMatchObject({ status: 'PAID', deliveredText: 'Карта 4441 1111 2222 3333', canReview: false });
+    expect((await api(ADMIN).post(`/api/admin/orders/${id}/issue`, { text: ' ' })).statusCode).toBe(400);
+
+    // «Завершить» без текста не стирает выданное и просит отзыв
+    const d = await api(ADMIN).post(`/api/admin/orders/${id}/deliver`, {});
+    expect(d.json()).toMatchObject({ status: 'DELIVERED', deliveredText: 'Карта 4441 1111 2222 3333' });
+    expect(sent.some((m) => m.startsWith(`delivered:${id}:`))).toBe(true);
+    expect((await api(CLIENT).get(`/api/orders/${id}`)).json().canReview).toBe(true);
+    expect((await api(ADMIN).post(`/api/admin/orders/${id}/issue`, { text: 'ещё' })).statusCode).toBe(400);
+  });
+
   it('админ может отклонить, и клиент получает причину в чат', async () => {
     const id = (await api(CLIENT).post('/api/orders', { variantId: premiumVariant, method: 'UAH', recipient: '@tymur_dev' })).json().id;
     await api(CLIENT).post(`/api/orders/${id}/proof`, {});
