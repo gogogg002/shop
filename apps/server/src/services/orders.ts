@@ -4,7 +4,7 @@ import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
 import { notifier, type OrderView } from './notify.js';
 import { normalizePhone } from './phone.js';
-import { STATUS_WORD, cleanText, orderTitle } from './labels.js';
+import { STATUS_WORD, cleanText, orderTitle, variantLabel } from './labels.js';
 
 export class ShopError extends Error {
   constructor(public code: string, message: string, public status = 400) {
@@ -32,8 +32,24 @@ export function computeTotal(price: number, feePercent: number, promo?: { amount
  */
 export function normalizeRecipient(kind: RecipientKind, raw: string | undefined): string | null {
   if (kind === 'PHONE') return normalizePhone(raw);
+  if (kind === 'STEAM') {
+    const login = (raw ?? '').trim();
+    return /^[A-Za-z0-9_.-]{2,64}$/.test(login) ? login : null;
+  }
   const u = (raw ?? '').trim().replace(/^@?/, '@');
   return /^@[A-Za-z0-9_]{4,32}$/.test(u) ? u : null;
+}
+
+/**
+ * Количество для варианта со своим количеством (звёзды, рубли Steam): целое в пределах minQty..maxQty.
+ * У обычного варианта всегда 1.
+ */
+export function checkQuantity(v: { perUnit: boolean; minQty: number; maxQty: number; unit: string }, raw: number | undefined): number {
+  if (!v.perUnit) return 1;
+  const q = Number(raw);
+  if (!Number.isInteger(q) || q < v.minQty || q > v.maxQty)
+    throw new ShopError('bad_quantity', `Укажите количество от ${v.minQty} до ${v.maxQty}${v.unit ? ` ${v.unit}` : ''}`);
+  return q;
 }
 
 /** ₽ (копейки) → гривны, округление вверх до целой гривны */
@@ -77,6 +93,7 @@ export async function createOrder(input: {
   method: PaymentMethod;
   recipient?: string;
   promoCode?: string;
+  quantity?: number;
 }) {
   const s = await getSettings();
   const variant = await prisma.variant.findUnique({ where: { id: input.variantId }, include: { product: true } });
@@ -88,8 +105,11 @@ export async function createOrder(input: {
       'bad_recipient',
       variant.product.recipientKind === 'PHONE'
         ? 'Укажите номер телефона аккаунта с кодом страны, например +7 900 123-45-67'
-        : 'Укажите username получателя, например @durov',
+        : variant.product.recipientKind === 'STEAM'
+          ? 'Укажите логин Steam (не никнейм), например gaben'
+          : 'Укажите username получателя, например @durov',
     );
+  const quantity = checkQuantity(variant, input.quantity);
 
   if (input.method === 'BALANCE') throw new ShopError('method_unavailable', 'Оплата с баланса пока не подключена');
   const methodKey = input.method as keyof ShopSettings['methods'];
@@ -113,7 +133,7 @@ export async function createOrder(input: {
     if (!promo || expired || promo.usesLeft === 0) throw new ShopError('bad_promo', 'Промокод не найден или истёк');
   }
 
-  const { amount, discount } = computeTotal(variant.price, s.fees[methodKey] ?? 0, promo);
+  const { amount, discount } = computeTotal(variant.price * quantity, s.fees[methodKey] ?? 0, promo);
 
   let order = await prisma.order.create({
     data: {
@@ -123,7 +143,8 @@ export async function createOrder(input: {
       method: input.method,
       amount,
       discount,
-      cost: variant.cost,
+      cost: variant.cost * quantity,
+      quantity,
       promoCode: promo?.code,
     },
   });
@@ -134,7 +155,7 @@ export async function createOrder(input: {
     const inv = await provider.createInvoice({
       orderId: order.id,
       amountRub: amount,
-      description: `${variant.product.title} · ${variant.title}`,
+      description: `${variant.product.title} · ${variantLabel(variant, quantity)}`,
     });
     order = await prisma.order.update({
       where: { id: order.id },
@@ -195,7 +216,7 @@ export async function markPaid(orderId: number) {
     if (delivered) return delivered;
   }
   await notifier().orderPaid(order);
-  await notifier().orderStatusToUser(order, `Заказ №${order.id} оплачен. Выдадим в течение 30 минут.`);
+  await notifier().orderStatusToUser(order, `Заказ №${order.id} оплачен. Скоро выдадим, статус придёт сюда.`);
   return order;
 }
 
@@ -217,7 +238,7 @@ async function deliverCode(orderId: number) {
   });
   if (!done) return null;
   const order = (await loadOrder(orderId))!;
-  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${orderTitle(order.variant.product, order.variant.title)}.\nКод: ${done}`);
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${orderTitle(order.variant.product, variantLabel(order.variant, order.quantity))}.\nКод: ${done}`);
   return order;
 }
 
@@ -255,7 +276,7 @@ export async function deliver(orderId: number, text?: string) {
   });
   if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
   const order = (await loadOrder(orderId))!;
-  const what = orderTitle(order.variant.product, order.variant.title);
+  const what = orderTitle(order.variant.product, variantLabel(order.variant, order.quantity));
   await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${what}.${text ? `\n${text}` : ''}`);
   return order;
 }

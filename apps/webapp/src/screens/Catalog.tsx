@@ -3,6 +3,7 @@ import { accessLabel, api, ratingText, reviewsWord, rub, type CatalogCategory, t
 import { Icon, useLoad } from '../ui/kit';
 import { Brand, CrystalCover, Druse, FacetStar, glyphOf, tintOf } from '../ui/Crystal';
 import { useMe } from '../App';
+import { matches, searchText } from '../search';
 
 export function Catalog({ category }: { category: string | null }) {
   const me = useMe()!;
@@ -11,9 +12,10 @@ export function Catalog({ category }: { category: string | null }) {
   const [q, setQ] = useState('');
 
   const products = useMemo(() => {
-    const all = (data ?? []).flatMap((c) => c.products.map((p) => ({ ...p, cat: c.slug })));
-    const needle = q.trim().toLowerCase();
-    return all.filter((p) => (!category || p.cat === category) && (!needle || `${p.title} ${p.subtitle}`.toLowerCase().includes(needle)));
+    const all = (data ?? []).flatMap((c) => c.products.map((p) => ({
+      ...p, cat: c.slug, hay: searchText(p.title, p.subtitle, c.title, ...p.modes.map((m) => accessLabel[m])),
+    })));
+    return all.filter((p) => (!category || p.cat === category) && matches(p.hay, q));
   }, [data, q, category]);
 
   const rating = feed.data?.summary;

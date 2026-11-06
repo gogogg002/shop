@@ -3,11 +3,11 @@ import type { Message } from 'grammy/types';
 import { adminIds, config, isAdmin } from '../config.js';
 import { setNotifier, type Notifier, type OrderView } from '../services/notify.js';
 import { ShopError, confirmManual, deliver, loadOrder, rejectManual } from '../services/orders.js';
-import { orderTitle } from '../services/labels.js';
+import { orderTitle, variantLabel } from '../services/labels.js';
 
 const rub = (kop: number) => `${(kop / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`;
 const who = (o: OrderView) => (o.user.username ? `@${o.user.username}` : o.user.firstName ?? String(o.user.tgId));
-const title = (o: OrderView) => orderTitle(o.variant.product, o.variant.title);
+const title = (o: OrderView) => orderTitle(o.variant.product, variantLabel(o.variant, o.quantity));
 const webUrl = (hash: string) => `${config.PUBLIC_URL}/#${hash}`;
 /** Для parse_mode HTML: имя покупателя «Маша <3» или название товара с «<» Telegram иначе не примет */
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

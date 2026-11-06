@@ -152,17 +152,17 @@ export function ProductEdit({ id }: { id: number | null }) {
 
       <div className="cap">Вход в аккаунт покупателя</div>
       <div className="seg">
-        {([['UNSPECIFIED', 'Не указано'], ['NO_LOGIN', 'Без входа'], ['WITH_LOGIN', 'Со входом']] as const).map(([k, t]) => (
+        {([['UNSPECIFIED', 'Не указано'], ['NO_LOGIN', 'Без входа'], ['WITH_LOGIN', 'Со входом'], ['GIFT', 'Подарком']] as const).map(([k, t]) => (
           <button key={k} className={p.access === k ? 'on' : ''} onClick={() => setP({
             ...p, access: k,
             // со входом удобнее спрашивать номер телефона, без входа — @username
             ...(k === 'WITH_LOGIN' && p.needsRecipient ? { recipientKind: 'PHONE' as const } : {}),
-            ...(k === 'NO_LOGIN' && p.needsRecipient ? { recipientKind: 'USERNAME' as const } : {}),
+            ...(k === 'GIFT' ? { needsRecipient: true, recipientKind: 'USERNAME' as const } : {}),
           })}>{t}</button>
         ))}
       </div>
       <p className="muted small" style={{ lineHeight: 1.45 }}>
-        Два товара с одинаковым названием в одной категории, один «Без входа», другой «Со входом», покупатель видит одной карточкой с двумя вкладками.
+        Товары с одинаковым названием в одной категории и разным режимом («Без входа», «Со входом», «Подарком») покупатель видит одной карточкой с вкладками.
       </p>
 
       <div className="cap">Что спросить у покупателя</div>
@@ -170,6 +170,7 @@ export function ProductEdit({ id }: { id: number | null }) {
         <button className={!p.needsRecipient ? 'on' : ''} onClick={() => set('needsRecipient', false)}>Ничего</button>
         <button className={p.needsRecipient && p.recipientKind === 'USERNAME' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'USERNAME' })}>@username</button>
         <button className={p.needsRecipient && p.recipientKind === 'PHONE' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'PHONE' })}>Телефон</button>
+        <button className={p.needsRecipient && p.recipientKind === 'STEAM' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'STEAM' })}>Логин Steam</button>
       </div>
 
       <div className="between"><span className="cap">Цены, ₽</span>

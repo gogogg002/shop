@@ -47,12 +47,14 @@ enum AccessMode {
   UNSPECIFIED // не показываем покупателю
   NO_LOGIN // без входа: по @username, подарком, кодом
   WITH_LOGIN // со входом в аккаунт покупателя
+  GIFT // подарком на @username
 }
 
 /// Что спрашиваем у покупателя при заказе (если needsRecipient)
 enum RecipientKind {
   USERNAME // @username в Telegram
   PHONE // номер телефона аккаунта, для выдачи со входом
+  STEAM // логин Steam, для пополнения
 }
 
 model Product {
@@ -84,7 +86,12 @@ model Variant {
   title     String // «12 мес», «500 Stars»
   price     Int // цена продажи
   oldPrice  Int? // зачёркнутая цена
-  cost      Int     @default(0) // закупка, для маржи
+  cost      Int     @default(0) // закупка, для маржи (у perUnit — за единицу)
+  /// Своё количество: покупатель вводит число единиц (звёзды, рубли Steam), price и cost — за единицу
+  perUnit   Boolean @default(false)
+  unit      String  @default("") // «Stars», «₽ на Steam»
+  minQty    Int     @default(1)
+  maxQty    Int     @default(1)
   isActive  Boolean @default(true)
   sort      Int     @default(0)
   codes     Code[]
@@ -132,6 +139,7 @@ model Order {
   method        PaymentMethod
   amount        Int // итог к оплате в копейках RUB
   cost          Int           @default(0) // закупка на момент заказа
+  quantity      Int           @default(1) // число единиц для варианта со своим количеством
   promoCode     String?
   discount      Int           @default(0)
   payAmount     String? // сумма в валюте оплаты строкой («1250.00 UAH», «36.12 USDT»)

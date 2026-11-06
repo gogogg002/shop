@@ -1,12 +1,16 @@
 import type { AccessMode, OrderStatus } from '@prisma/client';
 
-export const ACCESS_LABEL: Record<AccessMode, string> = { NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом', UNSPECIFIED: '' };
+export const ACCESS_LABEL: Record<AccessMode, string> = { NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом', GIFT: 'Подарком', UNSPECIFIED: '' };
 
 /** Статус заказа словами: для ответов админу на устаревшие кнопки */
 export const STATUS_WORD: Record<OrderStatus, string> = {
   PENDING_PAYMENT: 'ждёт оплаты', AWAITING_CONFIRMATION: 'чек на проверке', PAID: 'оплачен', DELIVERED: 'выдан',
   REJECTED: 'оплата отклонена', CANCELLED: 'отменён', REFUNDED: 'деньги возвращены',
 };
+
+/** Название позиции в заказе: «12 мес» или «750 Stars» для варианта со своим количеством */
+export const variantLabel = (v: { title: string; perUnit: boolean; unit: string }, quantity: number) =>
+  v.perUnit ? `${quantity.toLocaleString('ru-RU')} ${v.unit}`.trim() : v.title;
 
 /** «Telegram Premium (со входом) · 12 мес»: в уведомлениях оба режима одного товара должны различаться */
 export function orderTitle(product: { title: string; access: AccessMode }, variant: string) {

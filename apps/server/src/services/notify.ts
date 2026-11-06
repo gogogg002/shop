@@ -24,7 +24,7 @@ export interface Notifier {
 
 export type OrderView = Order & {
   user: { tgId: bigint; username: string | null; firstName: string | null };
-  variant: { title: string; product: { title: string; deliveryType: DeliveryType; access: AccessMode } };
+  variant: { title: string; perUnit: boolean; unit: string; product: { title: string; deliveryType: DeliveryType; access: AccessMode } };
 };
 
 export interface ReviewNotice {

@@ -128,8 +128,8 @@ export async function adminRoutes(app: FastifyInstance) {
     glass: z.enum(['RED', 'WHITE', 'DARK']).default('RED'),
     deliveryType: z.enum(['MANUAL', 'CODES']).default('MANUAL'),
     needsRecipient: z.boolean().default(true),
-    recipientKind: z.enum(['USERNAME', 'PHONE']).default('USERNAME'),
-    access: z.enum(['UNSPECIFIED', 'NO_LOGIN', 'WITH_LOGIN']).default('UNSPECIFIED'),
+    recipientKind: z.enum(['USERNAME', 'PHONE', 'STEAM']).default('USERNAME'),
+    access: z.enum(['UNSPECIFIED', 'NO_LOGIN', 'WITH_LOGIN', 'GIFT']).default('UNSPECIFIED'),
     wholesale: z.boolean().default(false),
     isActive: z.boolean().default(true),
     isHit: z.boolean().default(false),
@@ -153,6 +153,11 @@ export async function adminRoutes(app: FastifyInstance) {
     cost: int4.min(0).default(0),
     isActive: z.boolean().default(true),
     sort: int4.default(0),
+    // своё количество: price и cost за единицу
+    perUnit: z.boolean().optional(),
+    unit: z.string().trim().max(20).optional(),
+    minQty: int4.positive().optional(),
+    maxQty: int4.positive().optional(),
   });
   app.post('/api/admin/products/:id/variants', async (req) =>
     prisma.variant.create({ data: { ...variantBody.parse(req.body), productId: idParam(req) } }));

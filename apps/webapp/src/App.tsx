@@ -127,7 +127,7 @@ export function App() {
   let showNav = true;
   if (!isAdminPath) {
     if (seg[0] === 'product') { screen = <Product key={seg[1]} id={Number(seg[1])} />; showNav = false; }
-    else if (seg[0] === 'checkout') { screen = <Checkout variantId={Number(query.get('v'))} recipient={query.get('r') ?? ''} />; showNav = false; }
+    else if (seg[0] === 'checkout') { screen = <Checkout variantId={Number(query.get('v'))} recipient={query.get('r') ?? ''} quantity={Number(query.get('q')) || undefined} />; showNav = false; }
     else if (seg[0] === 'orders' && seg[1] && seg[2] === 'review') { screen = <Review orderId={Number(seg[1])} preset={Number(query.get('r')) || 0} />; showNav = false; }
     else if (seg[0] === 'orders' && seg[1]) { screen = <Order id={Number(seg[1])} />; showNav = false; }
     else if (seg[0] === 'reviews') { screen = <Reviews productId={Number(query.get('p')) || null} />; showNav = false; }

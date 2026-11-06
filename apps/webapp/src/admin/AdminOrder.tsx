@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, apiBlobUrl, copy, itemTitle, methodLabel, prettyPhone, rub, statusLabel, type AdminOrder as AO } from '../api';
+import { api, apiBlobUrl, copy, itemTitle, variantText, methodLabel, prettyPhone, rub, statusLabel, type AdminOrder as AO } from '../api';
 import { Key, useLoad, useToast } from '../ui/kit';
 import { Chat } from '../ui/Chat';
 
@@ -47,7 +47,7 @@ export function AdminOrder({ id }: { id: number }) {
       <div className="card pad col">
         <div className="row">
           <Key icon={o.variant.product.icon} glass={o.variant.product.glass} size={50} />
-          <div className="sp"><div style={{ fontWeight: 600, fontSize: 16 }}>{itemTitle(o.variant.product.title, o.variant.product.access, o.variant.title)}</div><div className="muted small">{methodLabel[o.method].title}{o.payAmount ? ` · ${o.payAmount}` : ''}</div></div>
+          <div className="sp"><div style={{ fontWeight: 600, fontSize: 16 }}>{itemTitle(o.variant.product.title, o.variant.product.access, variantText(o.variant, o.quantity))}</div><div className="muted small">{methodLabel[o.method].title}{o.payAmount ? ` · ${o.payAmount}` : ''}</div></div>
           <b>{rub(o.amount)}</b>
         </div>
         <div className="sep" />

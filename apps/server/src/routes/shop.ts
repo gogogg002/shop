@@ -5,17 +5,17 @@ import { requireUser } from '../auth/plugin.js';
 import { getSettings } from '../services/settings.js';
 import { autoProviders, isManual } from '../payments/index.js';
 import {
-  ShopError, addMessage, cancelByUser, computeTotal, createOrder, manualInstructions, normalizeRecipient, submitProof,
+  ShopError, addMessage, cancelByUser, checkQuantity, computeTotal, createOrder, manualInstructions, normalizeRecipient, submitProof,
 } from '../services/orders.js';
 import { REVIEW_TEXT_MAX, groupOf, listReviews, productGroup, productOrder, ratingSummary, submitReview } from '../services/reviews.js';
-import { ACCESS_LABEL } from '../services/labels.js';
+import { ACCESS_LABEL, variantLabel } from '../services/labels.js';
 import { bodyId, dbId, pathId } from './ids.js';
 import type { AccessMode } from '@prisma/client';
 
 const METHODS = ['CRYPTOBOT', 'XROCKET', 'LOLZ', 'SBP', 'UAH'] as const;
 
 /** Вкладки одного товара: сначала «Без входа», потом «Со входом» */
-const ACCESS_ORDER: Record<AccessMode, number> = { NO_LOGIN: 0, WITH_LOGIN: 1, UNSPECIFIED: 2 };
+const ACCESS_ORDER: Record<AccessMode, number> = { NO_LOGIN: 0, WITH_LOGIN: 1, GIFT: 2, UNSPECIFIED: 3 };
 
 /** Какие методы реально можно выбрать: включены в админке и настроены */
 async function availableMethods() {
@@ -73,7 +73,7 @@ export async function shopRoutes(app: FastifyInstance) {
             isHit: g.some((p) => p.isHit),
             access: first.access,
             modes,
-            minPrice: Math.min(...g.flatMap((p) => p.variants.map((v) => v.price))),
+            minPrice: Math.min(...g.flatMap((p) => p.variants.map((v) => (v.perUnit ? v.price * v.minQty : v.price)))),
           };
         });
         return { id: c.id, slug: c.slug, title: c.title, sort: c.sort, products };
@@ -112,6 +112,7 @@ export async function shopRoutes(app: FastifyInstance) {
       siblings: siblings.length > 1 ? siblings : [],
       variants: p.variants.map((v) => ({
         id: v.id, title: v.title, price: v.price, oldPrice: v.oldPrice, inStock: stock ? (stock[v.id] ?? 0) > 0 : true,
+        perUnit: v.perUnit, unit: v.unit, minQty: v.minQty, maxQty: v.maxQty,
       })),
       rating: await ratingSummary({ productId: { in: groupIds } }),
       reviews: await listReviews({ productIds: groupIds, limit: 3 }),
@@ -142,6 +143,7 @@ export async function shopRoutes(app: FastifyInstance) {
 
   const quoteBody = z.object({
     variantId: bodyId, method: z.enum(METHODS), promoCode: z.string().max(40).optional(), recipient: z.string().max(40).optional(),
+    quantity: z.coerce.number().int().optional(),
   });
   app.post('/api/orders/quote', async (req) => {
     const b = quoteBody.parse(req.body);
@@ -149,6 +151,7 @@ export async function shopRoutes(app: FastifyInstance) {
     const v = await prisma.variant.findUnique({ where: { id: b.variantId }, include: { product: true } });
     // Скрытый товар не продаётся: заказ на него всё равно не создастся, так что и цену не показываем
     if (!v || !v.isActive || !v.product.isActive) throw new ShopError('not_found', 'Товар не найден', 404);
+    const quantity = checkQuantity(v, b.quantity);
     let promo = null;
     if (b.promoCode) {
       promo = await prisma.promoCode.findUnique({ where: { code: b.promoCode.trim().toUpperCase() } });
@@ -156,11 +159,11 @@ export async function shopRoutes(app: FastifyInstance) {
         throw new ShopError('bad_promo', 'Промокод не найден или истёк');
     }
     return {
-      price: v.price, title: v.product.title, variant: v.title, icon: v.product.icon, glass: v.product.glass,
+      price: v.price * quantity, quantity, title: v.product.title, variant: variantLabel(v, quantity), icon: v.product.icon, glass: v.product.glass,
       // получатель в том виде, в каком его сохранит заказ (null — не разобрали)
       recipientKind: v.product.recipientKind,
       recipient: v.product.needsRecipient ? normalizeRecipient(v.product.recipientKind, b.recipient) : null,
-      ...computeTotal(v.price, s.fees[b.method] ?? 0, promo),
+      ...computeTotal(v.price * quantity, s.fees[b.method] ?? 0, promo),
     };
   });
 
@@ -169,6 +172,7 @@ export async function shopRoutes(app: FastifyInstance) {
     method: z.enum(METHODS),
     recipient: z.string().max(40).optional(),
     promoCode: z.string().max(40).optional(),
+    quantity: z.coerce.number().int().optional(),
   });
   app.post('/api/orders', async (req) => {
     const b = createBody.parse(req.body);
@@ -185,7 +189,7 @@ export async function shopRoutes(app: FastifyInstance) {
     });
     return orders.map((o) => ({
       id: o.id, status: o.status, method: o.method, amount: o.amount, payAmount: o.payAmount, createdAt: o.createdAt,
-      product: o.variant.product.title, variant: o.variant.title, icon: o.variant.product.icon, glass: o.variant.product.glass,
+      product: o.variant.product.title, variant: variantLabel(o.variant, o.quantity), icon: o.variant.product.icon, glass: o.variant.product.glass,
       access: o.variant.product.access,
       recipient: o.recipient, deliveredText: o.deliveredText, payUrl: o.status === 'PENDING_PAYMENT' ? o.payUrl : null,
       reviewed: Boolean(o.review),
@@ -203,7 +207,7 @@ export async function shopRoutes(app: FastifyInstance) {
     return {
       id: o.id, status: o.status, method: o.method, amount: o.amount, discount: o.discount, payAmount: o.payAmount,
       createdAt: o.createdAt, recipient: o.recipient, deliveredText: o.deliveredText,
-      product: o.variant.product.title, variant: o.variant.title, icon: o.variant.product.icon, glass: o.variant.product.glass,
+      product: o.variant.product.title, variant: variantLabel(o.variant, o.quantity), icon: o.variant.product.icon, glass: o.variant.product.glass,
       access: o.variant.product.access, productId: o.variant.productId,
       payUrl: o.status === 'PENDING_PAYMENT' ? o.payUrl : null,
       manual: isManual(o.method) ? manualInstructions(o, s) : null,
