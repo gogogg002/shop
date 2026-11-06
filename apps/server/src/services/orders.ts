@@ -158,13 +158,18 @@ export async function submitProof(orderId: number, userId: number, photo: Buffer
   const text = cleanText(note ?? '').trim();
   if (text.length > 2000) throw new ShopError('too_long', 'Подпись к чеку длиннее 2000 символов');
 
-  const fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { status: 'AWAITING_CONFIRMATION', proofFileId: fileId ?? order.proofFileId },
+  // Статус меняем до уведомления и только из «ждёт оплаты». Фото уходит админам по очереди, и первый из них
+  // может подтвердить или отклонить оплату, пока оно грузится остальным: это решение нельзя затирать
+  const moved = await prisma.order.updateMany({
+    where: { id: orderId, userId, status: { in: ['PENDING_PAYMENT', 'AWAITING_CONFIRMATION'] } },
+    data: { status: 'AWAITING_CONFIRMATION' },
   });
+  if (!moved.count) throw new ShopError('bad_state', 'Заказ уже обработан');
+
+  const fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
+  if (fileId) await prisma.order.update({ where: { id: orderId }, data: { proofFileId: fileId } });
   if (text) await addMessage(orderId, { userId, text, fromAdmin: false });
-  return updated;
+  return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 }
 
 /**

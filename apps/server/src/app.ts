@@ -26,8 +26,17 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
       const own = err.issues.find((i) => /[а-яё]/i.test(i.message))?.message;
       return reply.code(400).send({ error: 'validation', message: own ?? 'Проверьте поля', issues: err.issues });
     }
-    // Ошибки базы, которые вызывает сам запрос (в основном формы админки): ответ по делу вместо «что-то сломалось»
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    // Ошибки самого запроса, которые находит Fastify: кривой JSON, слишком большой файл, чужой тип тела
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) {
+      const code = (err as { code?: string }).code ?? 'bad_request';
+      const message = code === 'FST_REQ_FILE_TOO_LARGE' ? 'Фото больше 8 МБ. Пришлите скриншот или сожмите фото'
+        : status === 413 ? 'Слишком большой запрос' : 'Проверьте запрос';
+      return reply.code(status).send({ error: code, message });
+    }
+    // Ошибки базы из форм админки (занятый адрес, несуществующая категория): ответ по делу. В покупательских
+    // запросах такая ошибка значит баг в коде, поэтому там она остаётся 500 и попадает в лог как ошибка
+    if (err instanceof Prisma.PrismaClientKnownRequestError && req.url.startsWith('/api/admin/')) {
       const known: Record<string, [number, string, string]> = {
         P2002: [409, 'conflict', 'Такая запись уже есть'],
         P2003: [400, 'bad_ref', 'Связанная запись не найдена'],
