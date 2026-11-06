@@ -9,7 +9,8 @@ export function Order({ id }: { id: number }) {
   const toast = useToast();
   const file = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Какой запрос сейчас идёт: пока идёт любой, обе кнопки неактивны, а подпись меняется только у нажатой
+  const [busy, setBusy] = useState<'proof' | 'cancel' | null>(null);
 
   // Пока заказ в работе, обновляем раз в 8 секунд: статус и ответы поддержки
   useEffect(() => {
@@ -24,27 +25,34 @@ export function Order({ id }: { id: number }) {
   const st = statusLabel[o.status];
 
   async function sendProof() {
-    setBusy(true);
+    setBusy('proof');
     try {
       const form = new FormData();
       if (photo) form.append('file', photo);
-      const r = await api<{ status: string }>(`/api/orders/${id}/proof`, { method: 'POST', form });
+      const r = await api<{ status: OrderView['status'] }>(`/api/orders/${id}/proof`, { method: 'POST', form });
       // Админ мог решить, пока чек ещё уходил другим админам: тогда новый статус покажет сам заказ
       if (r.status === 'AWAITING_CONFIRMATION') toast('Отправили на проверку. Обычно это занимает до 15 минут');
+      // Форма чека пропадает сразу, не дожидаясь перезагрузки: второе нажатие не отправит чек ещё раз
+      setData((d) => d && { ...d, status: r.status });
       reload();
     } catch (e) {
       toast((e as Error).message, true);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function cancel() {
+    setBusy('cancel');
     try {
-      await api(`/api/orders/${id}/cancel`, { method: 'POST', body: {} });
+      const r = await api<{ status: OrderView['status'] }>(`/api/orders/${id}/cancel`, { method: 'POST', body: {} });
+      // Кнопки отмены пропадают сразу, не дожидаясь перезагрузки заказа: второе нажатие не придёт ошибкой
+      setData((d) => d && { ...d, status: r.status });
       reload();
     } catch (e) {
       toast((e as Error).message, true);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -94,7 +102,7 @@ export function Order({ id }: { id: number }) {
         <div className="card pad col">
           <div className="muted">Счёт {o.payAmount} ждёт оплаты. После оплаты статус обновится сам.</div>
           <button className="btn block" onClick={() => openPay(o.payUrl!)}>Перейти к оплате</button>
-          <button className="btn ghost block sm" onClick={cancel}>Отменить заказ</button>
+          <button className="btn ghost block sm" disabled={!!busy} onClick={cancel}>{busy === 'cancel' ? 'Отменяем…' : 'Отменить заказ'}</button>
         </div>
       )}
 
@@ -129,8 +137,8 @@ export function Order({ id }: { id: number }) {
               <button className="btn ghost block" onClick={() => file.current?.click()}>
                 <Icon name="img" size={20} />{photo ? photo.name : 'Приложить скриншот перевода'}
               </button>
-              <button className="btn block" disabled={busy || !photo} onClick={sendProof}>{busy ? 'Отправляем…' : 'Я оплатил'}</button>
-              {o.status === 'PENDING_PAYMENT' && <button className="btn ghost block sm" disabled={busy} onClick={cancel}>Отменить заказ</button>}
+              <button className="btn block" disabled={!!busy || !photo} onClick={sendProof}>{busy === 'proof' ? 'Отправляем…' : 'Я оплатил'}</button>
+              {o.status === 'PENDING_PAYMENT' && <button className="btn ghost block sm" disabled={!!busy} onClick={cancel}>{busy === 'cancel' ? 'Отменяем…' : 'Отменить заказ'}</button>}
             </>
           )}
         </div>

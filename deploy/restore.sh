@@ -35,66 +35,88 @@ if [ "${2:-}" != "--yes" ]; then
 fi
 
 psql() { docker compose exec -T db psql -q -v ON_ERROR_STOP=1 -U krynel krynel "$@"; }
+if ! docker compose exec -T db pg_isready -q -U krynel; then
+  echo "База не отвечает, восстанавливать не во что. Запустите её (docker compose up -d db) и повторите. Ничего не трогал" >&2
+  exit 1
+fi
+
 # Номера заказов, кодов и сообщений после восстановления продолжаются с самых больших, что уже были.
 # Иначе новый заказ получил бы номер удалённого, и старая кнопка «Подтвердить» в боте сработала бы на нём.
-# Номера пишутся в файл до удаления базы: если восстановление оборвётся, следующий запуск возьмёт их оттуда,
-# а не из полувосстановленной базы
-dir="${BACKUP_DIR:-$HOME/krynel-backups}"
-state="$dir/.restore-seqs"
-mkdir -p "$dir"
+# Номера пишутся в файл .restore-seqs в папке магазина до удаления базы: если восстановление оборвётся,
+# следующий запуск возьмёт их оттуда, а не из полувосстановленной базы. Файл есть, только пока восстановление
+# не закончено, и пока он есть, backup.sh отказывается снимать бэкап
+state="$PWD/.restore-seqs"
+header='# krynel restore pending'
 
-# Файл с номерами остаётся только после оборванного восстановления: тогда текущая база может быть половиной бэкапа
+# Файл остался от оборванного восстановления: текущая база может быть пустой или половиной бэкапа
 pending=0
-[ -s "$state" ] && pending=1
-readable=1 dropped=0 restored=0
-# Пока база не удалена, любая ошибка возвращает магазин как был. После удаления приложение не стартует
-# на половине базы: восстановление запускают ещё раз или приложение руками (docker compose start app)
+[ -e "$state" ] && pending=1
+readable=1 unknown=0 dropping=0 restored=0 finished=0
+# До удаления базы любой обрыв (ошибка, Ctrl+C, обрыв SSH) возвращает магазин как был. Если удаление уже
+# началось, приложение не стартует на пустой или половине базы: восстановление запускают ещё раз
 on_exit() {
-  local rc=$?
-  [ "$rc" = 0 ] && return
+  [ "$finished" = 1 ] && return
+  trap '' INT HUP TERM
   if [ "$restored" = 1 ]; then
     echo "База восстановлена, но приложение не запустилось. Ошибка выше, запуск: docker compose start app" >&2
-  elif [ "$dropped" = 1 ]; then
-    echo "Восстановление не закончено, приложение остановлено, чтобы не работать на половине базы. Ошибка выше" >&2
-    [ -s "$state" ] && echo "Запустите восстановление ещё раз: последние номера заказов сохранены в $state, следующий запуск их учтёт" >&2
-  elif [ "$pending" = 0 ] && [ "$readable" = 1 ]; then
-    rm -f -- "$state" "$state.new"
-    docker compose start app || true
-    echo "Восстановление не началось, база не тронута, приложение снова запущено" >&2
+  elif [ "$dropping" = 1 ]; then
+    echo "Восстановление оборвалось после начала удаления базы. Приложение остановлено, чтобы не работать на пустой или половине базы. Ошибка выше" >&2
+    echo "Запустите восстановление ещё раз: номера заказов сохранены в $state, следующий запуск их учтёт" >&2
   else
-    echo "Восстановление не началось, база не тронута. Приложение не запускаю: прошлое восстановление не закончено или текущая база не читается. Ошибка выше, запустите восстановление ещё раз" >&2
+    # База та же, что была: номера этого запуска помнить не нужно
+    [ "$pending" = 0 ] && rm -f -- "$state" "$state.new"
+    if [ "$pending" = 0 ] && [ "$readable" = 1 ]; then
+      # Если прервали во время остановки, она ещё может идти: дожидаемся её и запускаем заново
+      docker compose stop app > /dev/null 2>&1 || true
+      if out=$(docker compose start app 2>&1); then
+        echo "Восстановление не началось, база не тронута, приложение снова запущено" >&2
+      else
+        echo "$out" >&2
+        echo "Восстановление не началось, база не тронута, но приложение не запустилось: docker compose start app" >&2
+      fi
+    else
+      echo "Восстановление не началось, база не тронута. Приложение не запускаю: прошлое восстановление не закончено или текущая база не читается. Ошибка выше, запустите восстановление ещё раз" >&2
+    fi
   fi
 }
 trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 129' HUP
+trap 'exit 143' TERM
 
 docker compose stop app
 live=$(psql -At -F ' ' -c "SELECT sequencename, last_value FROM pg_sequences WHERE schemaname = 'public' AND last_value IS NOT NULL" 2>/dev/null) || { live=''; readable=0; }
+if [ "$pending" = 1 ]; then
+  # Номеров в файле нет, если и тот запуск не смог прочитать базу
+  grep -qxF unknown "$state" 2>/dev/null && unknown=1
+  grep -qxF "$header" "$state" 2>/dev/null || unknown=1
+elif [ "$readable" = 0 ]; then
+  unknown=1
+fi
 # По каждой последовательности большее из текущей базы и сохранённого прошлым, оборванным запуском
 merged=$( { cat -- "$state" 2>/dev/null || true; printf '%s\n' "$live"; } |
   awk 'NF == 2 && $1 ~ /^[A-Za-z0-9_]+$/ && $2 ~ /^[1-9][0-9]*$/ && length($2) <= 15 { if (!($1 in m) || $2 + 0 > m[$1] + 0) m[$1] = $2 }
        END { for (k in m) print k, m[k] }' | sort)
-if [ -n "$merged" ]; then
-  printf '%s\n' "$merged" > "$state.new"
-  mv -f -- "$state.new" "$state"
-fi
-if [ "$pending" = 1 ]; then
-  echo "Прошлое восстановление не закончилось. Номера заказов беру из $state, если они больше текущих" >&2
-elif [ "$readable" = 0 ] && [ -z "$merged" ]; then
-  echo "Номера из текущей базы прочитать не удалось: после восстановления сдвину их на 1000 вперёд, чтобы не повторить выданные" >&2
-fi
+content=$header
+[ "$unknown" = 1 ] && content+=$'\n'unknown
+[ -n "$merged" ] && content+=$'\n'$merged
+printf '%s\n' "$content" > "$state.new"
+mv -f -- "$state.new" "$state"
+[ "$pending" = 1 ] && echo "Прошлое восстановление не закончилось. Номера заказов беру из $state, если они больше текущих" >&2
+[ "$unknown" = 1 ] && echo "Какие номера уже выданы, неизвестно: после восстановления сдвину их на 1000 вперёд, чтобы не повторить выданные" >&2
 
+dropping=1
 docker compose exec -T db dropdb --if-exists --force -U krynel krynel
-dropped=1
 docker compose exec -T db createdb -U krynel krynel
 gzip -dc "$file" | psql > /dev/null
-if [ -n "$merged" ]; then
-  # Последовательности, которых нет в бэкапе (таблица появилась позже), пропускаются
-  values=$(printf '%s\n' "$merged" | awk -v q="'" '{ printf "%s(%s%s%s, %s)", (NR > 1 ? ", " : ""), q, $1, q, $2 }')
-  psql -c "SELECT setval(format('%I.%I', s.schemaname, s.sequencename)::regclass, GREATEST(s.last_value, v.val)) FROM pg_sequences s JOIN (VALUES $values) AS v(name, val) ON s.sequencename = v.name WHERE s.schemaname = 'public'" > /dev/null
-else
-  psql -c "SELECT setval(format('%I.%I', schemaname, sequencename)::regclass, COALESCE(last_value, 0) + 1000) FROM pg_sequences WHERE schemaname = 'public'" > /dev/null
-fi
-rm -f -- "$state"
+# Каждая последовательность восстановленной базы: большее из бэкапа и сохранённого, плюс 1000, если номера неизвестны.
+# Последовательности, которых нет в бэкапе (таблица появилась позже), пропускаются
+bump=0
+[ "$unknown" = 1 ] && bump=1000
+values=$(printf '%s\n' "$merged" | awk -v q="'" 'NF == 2 { printf ", (%s%s%s, %s)", q, $1, q, $2 }')
+psql -c "SELECT setval(format('%I.%I', s.schemaname, s.sequencename)::regclass, GREATEST(s.last_value, v.val, 0) + $bump) FROM pg_sequences s LEFT JOIN (VALUES ('', 0)$values) AS v(name, val) ON v.name = s.sequencename WHERE s.schemaname = 'public' AND (s.last_value IS NOT NULL OR v.val IS NOT NULL OR $bump > 0)" > /dev/null
 restored=1
+rm -f -- "$state"
 docker compose start app
+finished=1
 echo "База восстановлена из $file"
