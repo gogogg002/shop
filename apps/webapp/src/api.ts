@@ -171,6 +171,10 @@ export const statusLabel: Record<OrderStatus, { text: string; tone: 'ok' | 'warn
   REFUNDED: { text: 'Возврат', tone: 'info' },
 };
 
+/** Статус для показа: данные уже выданы, но заказ не завершён — «В работе», а не «Выдаём» */
+export const orderStatus = (o: { status: OrderStatus; deliveredText: string | null }) =>
+  o.status === 'PAID' && o.deliveredText ? { text: 'В работе', tone: 'warn' as const } : statusLabel[o.status];
+
 /** Картинка, которую сервер отдаёт только с авторизацией (чек оплаты) */
 export async function apiBlobUrl(path: string): Promise<string> {
   const headers: Record<string, string> = {};

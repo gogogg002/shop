@@ -1,4 +1,4 @@
-import { api, itemTitle, prettyPhone, rub, statusLabel, type OrderListItem } from '../api';
+import { api, itemTitle, orderStatus, prettyPhone, rub, type OrderListItem } from '../api';
 import { Key, useLoad } from '../ui/kit';
 
 const fmt = (d: string) => new Date(d).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -17,8 +17,9 @@ export function Orders() {
       {data && !data.length && <div className="empty">Заказов пока нет. <a href="#/" style={{ color: 'var(--a2)' }}>В каталог</a></div>}
 
       {active.map((o) => {
-        const st = statusLabel[o.status];
-        const step = o.status === 'PAID' ? 2 : o.status === 'AWAITING_CONFIRMATION' ? 1 : 0;
+        const st = orderStatus(o);
+        // Текущий шаг: оплата (и её проверка) → выдаём → данные у покупателя
+        const step = o.status === 'PAID' ? (o.deliveredText ? 2 : 1) : 0;
         return (
           <a key={o.id} href={`#/orders/${o.id}`} className="card pad lit">
             <div className="between"><span className={`pill ${st.tone}`}>{st.text}</span><span className="mono muted small">#{o.id} · {fmt(o.createdAt)}</span></div>
@@ -43,7 +44,7 @@ export function Orders() {
       {rest.length > 0 && (
         <div className="card list">
           {rest.map((o) => {
-            const st = statusLabel[o.status];
+            const st = orderStatus(o);
             return (
               // Всегда на страницу заказа: там выданный код и чат, а оценку можно поставить звёздами прямо на ней
               <a key={o.id} href={`#/orders/${o.id}`} className="row item">

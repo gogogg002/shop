@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, copy, isNetwork, itemTitle, methodLabel, openPay, prettyPhone, rub, statusLabel, type OrderView } from '../api';
+import { api, copy, isNetwork, itemTitle, methodLabel, openPay, orderStatus, prettyPhone, rub, type OrderView } from '../api';
 import { Icon, Key, Stale, Stars, useLoad, useToast } from '../ui/kit';
 import { go } from '../App';
 import { arrived, Chat } from '../ui/Chat';
@@ -26,8 +26,7 @@ export function Order({ id }: { id: number }) {
   // бы ошибкой, и вместе с чатом пропал бы недописанный текст
   if (!o) return <div className="page">{error ? <div className="empty">{error}</div> : <div className="skeleton" style={{ height: 300 }} />}</div>;
 
-  // Данные уже выданы, но заказ не завершён: «В работе», а не «Выдаём»
-  const st = o.status === 'PAID' && o.deliveredText ? { text: 'В работе', tone: 'warn' as const } : statusLabel[o.status];
+  const st = orderStatus(o);
 
   async function sendProof() {
     setBusy('proof');

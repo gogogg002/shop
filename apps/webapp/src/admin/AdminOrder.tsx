@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, apiBlobUrl, copy, isNetwork, itemTitle, variantText, methodLabel, prettyPhone, rub, statusLabel, type AdminOrder as AO } from '../api';
+import { api, apiBlobUrl, copy, isNetwork, itemTitle, variantText, methodLabel, orderStatus, prettyPhone, rub, type AdminOrder as AO } from '../api';
 import { Key, Stale, useLoad, useToast } from '../ui/kit';
 import { arrived, Chat } from '../ui/Chat';
 
@@ -36,7 +36,7 @@ export function AdminOrder({ id }: { id: number }) {
     }
   }
 
-  const st = statusLabel[o.status];
+  const st = orderStatus(o);
   const buyer = o.user.username ? `@${o.user.username}` : o.user.firstName ?? o.user.tgId;
 
   return (
