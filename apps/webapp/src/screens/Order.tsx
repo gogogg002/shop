@@ -35,7 +35,7 @@ export function Order({ id }: { id: number }) {
       if (photo) form.append('file', photo);
       const r = await api<{ status: OrderView['status'] }>(`/api/orders/${id}/proof`, { method: 'POST', form });
       // Админ мог решить, пока чек ещё уходил другим админам: тогда новый статус покажет сам заказ
-      if (r.status === 'AWAITING_CONFIRMATION') toast('Чек отправлен, проверка обычно до 15 минут');
+      if (r.status === 'AWAITING_CONFIRMATION') toast('Чек отправлен на проверку');
       // Форма чека пропадает сразу, не дожидаясь перезагрузки: второе нажатие не отправит чек ещё раз
       setData((d) => d && { ...d, status: r.status });
       setPhoto(null);

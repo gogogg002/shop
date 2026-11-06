@@ -36,7 +36,7 @@ export function startBot() {
   };
 
   bot.command('start', (ctx) =>
-    ctx.reply('Krynel — Premium, Stars и пополнения за пару минут 👇', {
+    ctx.reply('Krynel — Premium, Stars и пополнения 👇', {
       // Админу первой кнопкой — админка
       reply_markup: isAdmin(BigInt(ctx.from!.id))
         ? new InlineKeyboard().webApp('⚙️ Админка', webUrl('/admin')).row().webApp('Открыть магазин', config.PUBLIC_URL)

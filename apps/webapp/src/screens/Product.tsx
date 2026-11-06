@@ -122,7 +122,6 @@ export function Product({ id }: { id: number }) {
             {v.perUnit && <div className="muted small" style={{ marginTop: 8 }}>{perUnitText}</div>}
             {save > 0 && <div className="muted small" style={{ marginTop: 8 }}><s>{rub(v.oldPrice!)}</s> · экономия {rub(v.oldPrice! - v.price)}</div>}
           </div>
-          <span className="eta"><Icon name="bolt" size={14} />{p.deliveryType === 'CODES' && !v?.perUnit ? 'сразу' : '≈ 5 мин'}</span>
         </div>
       )}
 
