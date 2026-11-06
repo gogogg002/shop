@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
-import { ApiError, api, methodLabel, openPay, rub, tg, type Glass, type Method } from '../api';
+import { ApiError, api, isNetwork, methodLabel, openPay, prettyPhone, rub, tg, type Glass, type Method, type RecipientKind } from '../api';
 import { Icon, Key, useToast } from '../ui/kit';
 import { go, useMe } from '../App';
 
-interface Quote { price: number; discount: number; fee: number; amount: number; title: string; variant: string; icon: string; glass: Glass }
+interface Quote {
+  price: number; discount: number; fee: number; amount: number; title: string; variant: string; icon: string; glass: Glass;
+  /** получатель так, как его сохранит заказ; null — не разобрали или он не нужен */
+  recipientKind: RecipientKind; recipient: string | null;
+}
+
+const shownRecipient = (q: Quote, raw: string) =>
+  q.recipient ? (q.recipientKind === 'PHONE' ? prettyPhone(q.recipient) : q.recipient) : raw;
 
 export function Checkout({ variantId, recipient }: { variantId: number; recipient: string }) {
   const me = useMe()!;
@@ -16,12 +23,12 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
 
   useEffect(() => {
     if (!method) return;
-    api<Quote>('/api/orders/quote', { body: { variantId, method, promoCode: appliedPromo || undefined } })
+    api<Quote>('/api/orders/quote', { body: { variantId, method, promoCode: appliedPromo || undefined, recipient: recipient || undefined } })
       .then(setQuote)
       .catch((e: ApiError) => {
         if (e.code === 'bad_promo') { setAppliedPromo(''); toast(e.message, true); } else toast(e.message, true);
       });
-  }, [variantId, method, appliedPromo, toast]);
+  }, [variantId, method, appliedPromo, recipient, toast]);
 
   async function pay() {
     if (!method) return;
@@ -34,7 +41,8 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
       if (o.payUrl) openPay(o.payUrl);
       go(`/orders/${o.id}`);
     } catch (e) {
-      toast((e as Error).message, true);
+      // Ответ мог потеряться, когда заказ уже создан: второе нажатие создало бы ещё один
+      toast(isNetwork(e) ? 'Связь оборвалась, заказ мог уже создаться. Проверьте «Заказы», прежде чем оплачивать ещё раз' : (e as Error).message, true);
       setBusy(false);
     }
   }
@@ -53,7 +61,7 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
             <Key icon={quote.icon} glass={quote.glass} size={50} />
             <div className="sp">
               <div style={{ fontWeight: 600, fontSize: 16 }}>{quote.title}</div>
-              <div className="muted small">{quote.variant}{recipient ? ` → ${recipient.startsWith('@') ? recipient : '@' + recipient}` : ''}</div>
+              <div className="muted small">{quote.variant}{recipient ? ` → ${shownRecipient(quote, recipient)}` : ''}</div>
             </div>
           </div>
           <div style={{ borderTop: '2px dashed rgba(255,255,255,.1)', margin: '4px 0' }} />

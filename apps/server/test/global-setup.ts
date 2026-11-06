@@ -8,7 +8,7 @@ export default async function setup() {
   execSync('npx prisma db push --skip-generate', { env: { ...process.env, DATABASE_URL: url }, stdio: 'ignore' });
   const db = new PrismaClient({ datasourceUrl: url });
   await db.$executeRawUnsafe(
-    'TRUNCATE "Message","Code","Order","Variant","Product","Category","User","PromoCode","Setting" RESTART IDENTITY CASCADE',
+    'TRUNCATE "Review","Message","Code","Order","Variant","Product","Category","User","PromoCode","Setting" RESTART IDENTITY CASCADE',
   );
   await db.$disconnect();
 }

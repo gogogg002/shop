@@ -137,3 +137,22 @@ a { color: inherit; text-decoration: none; }
 .skeleton { background: var(--s1); border-radius: 22px; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .5; } }
 .empty { text-align: center; padding: 40px 16px; color: var(--m); }
+
+/* рейтинг и отзывы */
+.trust { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; height: 34px; padding: 0 12px; border-radius: 17px;
+  background: var(--s1); border: 1px solid var(--line); font-size: 14px; }
+.trust-star { color: #ffc94d; }
+.trust svg { color: var(--m); }
+.stars { display: inline-flex; gap: 2px; }
+.stars svg { fill: rgba(255,255,255,.18); }
+.stars svg.on { fill: #ffc94d; }
+.stars-input { display: flex; gap: 6px; }
+.stars-input button { padding: 4px; border-radius: 12px; line-height: 0; transition: transform .12s; }
+.stars-input button:active { transform: scale(.9); }
+.stars-input svg { fill: rgba(255,255,255,.16); transition: fill .12s; }
+.stars-input button.on svg { fill: #ffc94d; }
+.review .ava { width: 34px; height: 34px; border-radius: 50%; background: var(--s3); display: grid; place-items: center; font-weight: 700; flex: none; }
+.note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: rgba(108,196,255,.08);
+  border: 1px solid rgba(108,196,255,.22); color: #cfe9ff; font-size: 13.5px; line-height: 1.45; }
+.note svg { flex: none; color: var(--info); margin-top: 1px; }
+.done-mark { width: 76px; height: 76px; border-radius: 50%; align-self: center; display: grid; place-items: center; background: rgba(75,227,160,.14); color: var(--ok); }

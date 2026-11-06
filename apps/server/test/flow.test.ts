@@ -16,7 +16,9 @@ const notifier: Notifier = {
   async manualPaymentProof(o) { sent.push(`proof:${o.id}`); return 'file-123'; },
   async orderPaid(o) { sent.push(`paid:${o.id}`); },
   async orderStatusToUser(o, text) { sent.push(`user:${o.id}:${text}`); },
+  async orderDelivered(o, text) { sent.push(`delivered:${o.id}:${text}`); },
   async chatMessage(o, _t, fromAdmin) { sent.push(`chat:${o.id}:${fromAdmin ? 'admin' : 'user'}`); },
+  async newReview(r) { sent.push(`review:${r.orderId}:${r.rating}`); },
 };
 
 const api = (who: string) => ({
@@ -106,6 +108,8 @@ describe('ручная оплата гривнами', () => {
 
     const d = await api(ADMIN).post(`/api/admin/orders/${id}/deliver`, { text: 'Подарок отправлен' });
     expect(d.json().status).toBe('DELIVERED');
+    // клиенту уходит пуш «выполнен» (в боте под ним кнопка «Оставить отзыв»)
+    expect(sent).toContain(`delivered:${id}:✅ Заказ №${id} выполнен: Telegram Premium · 12 мес.\nПодарок отправлен`);
     expect((await api(ADMIN).post(`/api/admin/orders/${id}/deliver`)).statusCode).toBe(400);
   });
 
@@ -194,13 +198,14 @@ describe('коды', () => {
 describe('админ: товары и цены', () => {
   it('меняет цену и скрывает товар с витрины', async () => {
     await api(ADMIN).patch(`/api/admin/variants/${premiumVariant}`, { price: R(3290) });
-    const p = (await api(CLIENT).get('/api/catalog')).json()[0].products.find((x: { title: string }) => x.title === 'Telegram Premium');
+    const tgCat = () => api(CLIENT).get('/api/catalog').then((r) => r.json().find((c: { slug: string }) => c.slug === 'tg'));
+    const p = (await tgCat()).products.find((x: { title: string }) => x.title === 'Telegram Premium');
     expect(p.minPrice).toBe(R(3290));
 
     const products = (await api(ADMIN).get('/api/admin/products')).json();
-    const prem = products.find((x: { title: string }) => x.title === 'Telegram Premium');
+    const prem = products.find((x: { id: number; variants: { id: number }[] }) => x.variants.some((v) => v.id === premiumVariant));
     await api(ADMIN).patch(`/api/admin/products/${prem.id}`, { isActive: false });
-    const after = (await api(CLIENT).get('/api/catalog')).json()[0].products.map((x: { title: string }) => x.title);
+    const after = (await tgCat()).products.map((x: { title: string }) => x.title);
     expect(after).not.toContain('Telegram Premium');
     await api(ADMIN).patch(`/api/admin/products/${prem.id}`, { isActive: true });
   });

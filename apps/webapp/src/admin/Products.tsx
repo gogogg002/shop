@@ -1,9 +1,10 @@
-import { api, rub, type Glass } from '../api';
+import { api, accessLabel, rub, type Access, type Glass, type RecipientKind } from '../api';
 import { Icon, Key, Toggle, useLoad, useToast } from '../ui/kit';
 
 export interface AdminProduct {
   id: number; categoryId: number; title: string; subtitle: string; description: string; icon: string; glass: Glass;
-  deliveryType: 'MANUAL' | 'CODES'; needsRecipient: boolean; isActive: boolean; isHit: boolean; sort: number; sales30d: number;
+  deliveryType: 'MANUAL' | 'CODES'; needsRecipient: boolean; recipientKind: RecipientKind; access: Access; wholesale: boolean;
+  isActive: boolean; isHit: boolean; sort: number; sales30d: number;
   category: { id: number; title: string };
   variants: { id: number; title: string; price: number; oldPrice: number | null; cost: number; isActive: boolean; sort: number; codesLeft: number }[];
 }
@@ -47,7 +48,9 @@ export function Products() {
                 <a href={`#/admin/products/${p.id}`} className="row sp">
                   <Key icon={p.icon} glass={p.glass} size={42} />
                   <div className="sp">
-                    <div style={{ fontWeight: 600 }} className="ellipsis">{p.title}</div>
+                    <div style={{ fontWeight: 600 }} className="ellipsis">
+                      {p.title}{accessLabel[p.access] && <span className="muted" style={{ fontWeight: 500 }}> · {accessLabel[p.access].toLowerCase()}</span>}
+                    </div>
                     <div className="muted ellipsis" style={{ fontSize: 12.5 }}>
                       {prices.length ? `${p.variants.length} вар. · ${rub(Math.min(...prices))}–${rub(Math.max(...prices))}` : 'нет вариантов'} · {p.sales30d} продаж за 30 дн
                     </div>

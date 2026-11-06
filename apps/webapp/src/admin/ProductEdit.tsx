@@ -28,7 +28,10 @@ export function ProductEdit({ id }: { id: number | null }) {
       setP(rest);
       setVars(variants.map((v) => ({ id: v.id, title: v.title, price: toRub(v.price), oldPrice: toRub(v.oldPrice), cost: toRub(v.cost), isActive: v.isActive, codesLeft: v.codesLeft })));
     } else {
-      setP({ categoryId: cats.data[0]?.id ?? 0, title: '', subtitle: '', description: '', icon: 'star', glass: 'RED', deliveryType: 'MANUAL', needsRecipient: true, isActive: true, isHit: false, sort: 0 });
+      setP({
+        categoryId: cats.data[0]?.id ?? 0, title: '', subtitle: '', description: '', icon: 'star', glass: 'RED', deliveryType: 'MANUAL',
+        needsRecipient: true, recipientKind: 'USERNAME', access: 'UNSPECIFIED', wholesale: false, isActive: true, isHit: false, sort: 0,
+      });
       setVars([{ title: '1 мес', price: '', oldPrice: '', cost: '', isActive: true }]);
     }
   }, [cats.data, all.data, id, p]);
@@ -140,6 +143,28 @@ export function ProductEdit({ id }: { id: number | null }) {
         <button className={p.deliveryType === 'CODES' ? 'on' : ''} onClick={() => set('deliveryType', 'CODES')}>Коды из базы</button>
       </div>
 
+      <div className="cap">Вход в аккаунт покупателя</div>
+      <div className="seg">
+        {([['UNSPECIFIED', 'Не указано'], ['NO_LOGIN', 'Без входа'], ['WITH_LOGIN', 'Со входом']] as const).map(([k, t]) => (
+          <button key={k} className={p.access === k ? 'on' : ''} onClick={() => setP({
+            ...p, access: k,
+            // со входом удобнее спрашивать номер телефона, без входа — @username
+            ...(k === 'WITH_LOGIN' && p.needsRecipient ? { recipientKind: 'PHONE' as const } : {}),
+            ...(k === 'NO_LOGIN' && p.needsRecipient ? { recipientKind: 'USERNAME' as const } : {}),
+          })}>{t}</button>
+        ))}
+      </div>
+      <p className="muted small" style={{ lineHeight: 1.45 }}>
+        Два товара с одинаковым названием в одной категории, один «Без входа», другой «Со входом», покупатель видит одной карточкой с двумя вкладками.
+      </p>
+
+      <div className="cap">Что спросить у покупателя</div>
+      <div className="seg">
+        <button className={!p.needsRecipient ? 'on' : ''} onClick={() => set('needsRecipient', false)}>Ничего</button>
+        <button className={p.needsRecipient && p.recipientKind === 'USERNAME' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'USERNAME' })}>@username</button>
+        <button className={p.needsRecipient && p.recipientKind === 'PHONE' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'PHONE' })}>Телефон</button>
+      </div>
+
       <div className="between"><span className="cap">Цены, ₽</span>
         <button style={{ color: 'var(--a2)', fontWeight: 600, fontSize: 13.5 }} onClick={() => setVars([...vars, { title: '', price: '', oldPrice: '', cost: '', isActive: true }])}>+ вариант</button>
       </div>
@@ -182,7 +207,10 @@ export function ProductEdit({ id }: { id: number | null }) {
       <div className="card list">
         <div className="row item"><span className="sp">Показывать на витрине</span><Toggle on={p.isActive} onChange={(v) => set('isActive', v)} label="Показывать на витрине" /></div>
         <div className="row item"><span className="sp">Метка «Хит»</span><Toggle on={p.isHit} onChange={(v) => set('isHit', v)} label="Метка Хит" /></div>
-        <div className="row item"><span className="sp">Спрашивать @username получателя</span><Toggle on={p.needsRecipient} onChange={(v) => set('needsRecipient', v)} label="Спрашивать получателя" /></div>
+        <div className="row item">
+          <div className="sp"><div>Вариант «Опт»</div><div className="muted small">Покупатель пишет в поддержку из настроек</div></div>
+          <Toggle on={p.wholesale} onChange={(v) => set('wholesale', v)} label="Вариант Опт" />
+        </div>
       </div>
 
       <div className="sticky-cta row">

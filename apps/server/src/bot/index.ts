@@ -1,20 +1,26 @@
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
+import type { Message } from 'grammy/types';
 import { adminIds, config, isAdmin } from '../config.js';
 import { setNotifier, type Notifier, type OrderView } from '../services/notify.js';
 import { ShopError, confirmManual, deliver, loadOrder, rejectManual } from '../services/orders.js';
+import { orderTitle } from '../services/labels.js';
 
 const rub = (kop: number) => `${(kop / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`;
 const who = (o: OrderView) => (o.user.username ? `@${o.user.username}` : o.user.firstName ?? String(o.user.tgId));
-const title = (o: OrderView) => `${o.variant.product.title} · ${o.variant.title}`;
+const title = (o: OrderView) => orderTitle(o.variant.product, o.variant.title);
 const webUrl = (hash: string) => `${config.PUBLIC_URL}/#${hash}`;
+/** Для parse_mode HTML: имя покупателя «Маша <3» или название товара с «<» Telegram иначе не примет */
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function orderCard(o: OrderView) {
+/** Карточка заказа для админа. html=false — тот же текст без разметки, запасной вариант */
+function orderCard(o: OrderView, html = true) {
+  const e = html ? esc : (s: string) => s;
   return [
-    `<b>Заказ №${o.id}</b>`,
-    title(o),
-    o.recipient ? `Получатель: ${o.recipient}` : null,
-    `Покупатель: ${who(o)}`,
-    `Сумма: ${rub(o.amount)}${o.payAmount ? ` (${o.payAmount})` : ''} · ${o.method}`,
+    html ? `<b>Заказ №${o.id}</b>` : `Заказ №${o.id}`,
+    e(title(o)),
+    o.recipient ? `Получатель: ${e(o.recipient)}` : null,
+    `Покупатель: ${e(who(o))}`,
+    `Сумма: ${rub(o.amount)}${o.payAmount ? ` (${e(o.payAmount)})` : ''} · ${o.method}`,
   ].filter(Boolean).join('\n');
 }
 
@@ -64,16 +70,25 @@ export function startBot() {
       const kb = new InlineKeyboard()
         .text('✅ Подтвердить', `ok:${o.id}`).text('❌ Отклонить', `no:${o.id}`).row()
         .webApp('Открыть заказ', webUrl(`/admin/orders/${o.id}`));
-      const caption = `🧾 Ручная оплата ждёт проверки\n\n${orderCard(o)}`;
+      const head = '🧾 Ручная оплата ждёт проверки\n\n';
+      const name = `order-${o.id}.jpg`;
       let fileId: string | null = null;
+      let delivered = 0;
+      const send = async (chat: number, html: boolean): Promise<Message> => {
+        const text = head + orderCard(o, html) + (photo ? '' : '\n\nЧек не приложен.');
+        const opts = { reply_markup: kb, ...(html ? { parse_mode: 'HTML' as const } : {}) };
+        if (!photo) return bot.api.sendMessage(chat, text, opts);
+        // Длинный скриншот из банка или не картинку Telegram фото не примет: тогда шлём тот же файл документом
+        return bot.api.sendPhoto(chat, new InputFile(photo, name), { caption: text, ...opts })
+          .catch(() => bot.api.sendDocument(chat, new InputFile(photo, name), { caption: text, ...opts }));
+      };
       await toAdmins(async (chat) => {
-        if (photo) {
-          const m = await bot.api.sendPhoto(chat, new InputFile(photo, `order-${o.id}.jpg`), { caption, parse_mode: 'HTML', reply_markup: kb });
-          fileId ??= m.photo?.at(-1)?.file_id ?? null;
-        } else {
-          await bot.api.sendMessage(chat, `${caption}\n\nЧек не приложен.`, { parse_mode: 'HTML', reply_markup: kb });
-        }
+        // Разметку не разобрал Telegram: тот же чек без разметки, лишь бы дошёл
+        const m = await send(chat, true).catch((e: Error) => (/can't parse entities/i.test(e.message) ? send(chat, false) : Promise.reject(e)));
+        fileId ??= m.photo?.at(-1)?.file_id ?? m.document?.file_id ?? null;
+        delivered += 1;
       });
+      if (admins.length && !delivered) throw new Error('чек не дошёл ни до одного админа');
       return fileId;
     },
     async orderPaid(o) {
@@ -84,6 +99,30 @@ export function startBot() {
       await bot.api.sendMessage(Number(o.user.tgId), text, {
         reply_markup: new InlineKeyboard().webApp('Открыть заказ', webUrl(`/orders/${o.id}`)),
       }).catch((e) => console.error('notify user failed', e.message));
+    },
+    async orderDelivered(o, text) {
+      // Кнопка сразу открывает экран отзыва в мини-аппе
+      const kb = new InlineKeyboard()
+        .webApp('⭐ Оставить отзыв', webUrl(`/orders/${o.id}/review`)).row()
+        .webApp('Открыть заказ', webUrl(`/orders/${o.id}`));
+      await bot.api.sendMessage(Number(o.user.tgId), `${text}\n\nСпасибо за покупку! Оцените заказ, это займёт 10 секунд.`, {
+        reply_markup: kb,
+      }).catch((e) => console.error('notify user failed', e.message));
+    },
+    async newReview(r) {
+      const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
+      const short = (t: string) => (Array.from(t).length > 300 ? `${Array.from(t).slice(0, 300).join('')}…` : t);
+      const body = [
+        r.edited ? `✏️ ${stars(r.rating)} Отзыв к заказу №${r.orderId} изменён` : `${stars(r.rating)} Новый отзыв к заказу №${r.orderId}`,
+        orderTitle({ title: r.product, access: r.access }, r.variant),
+        `От: ${r.author}`,
+        '',
+        r.text || 'Без текста',
+        ...(r.edited ? ['', `Было: ${stars(r.edited.rating)}${r.edited.text ? ` «${short(r.edited.text)}»` : ''}`] : []),
+      ].join('\n');
+      await toAdmins((chat) => bot.api.sendMessage(chat, body, {
+        reply_markup: new InlineKeyboard().webApp('Все отзывы', webUrl('/admin/reviews')).webApp('Заказ', webUrl(`/admin/orders/${r.orderId}`)),
+      }));
     },
     async chatMessage(o, text, fromAdmin) {
       if (fromAdmin) {

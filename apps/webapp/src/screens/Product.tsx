@@ -1,49 +1,90 @@
 import { useEffect, useState } from 'react';
-import { api, rub, type ProductView } from '../api';
+import { api, openTelegramChat, prettyPhone, ratingText, reviewsWord, rub, type ProductView } from '../api';
+import { normalizePhone } from '../phone';
 import { Icon, Key, useLoad } from '../ui/kit';
-import { go } from '../App';
+import { ReviewCard } from '../ui/ReviewCard';
+import { go, swap, useMe } from '../App';
+
+/** Выбор на странице товара: вариант по id или «Опт» */
+type Pick = number | 'bulk' | null;
+
+const recipientSpec = {
+  USERNAME: {
+    label: 'Username получателя в Telegram', placeholder: '@username', inputMode: 'text' as const,
+    ok: (v: string) => /^@?[A-Za-z0-9_]{4,32}$/.test(v), hint: 'Укажите получателя',
+  },
+  PHONE: {
+    label: 'Номер телефона аккаунта Telegram', placeholder: '+7 900 123-45-67', inputMode: 'tel' as const,
+    // так же, как сервер: номер без кода страны, который нельзя понять однозначно, не пропускаем
+    ok: (v: string) => normalizePhone(v) !== null, hint: 'Укажите номер с кодом страны',
+  },
+};
 
 export function Product({ id }: { id: number }) {
+  const me = useMe()!;
   const { data: p, error } = useLoad(() => api<ProductView>(`/api/products/${id}`), [id]);
-  const [variantId, setVariantId] = useState<number | null>(null);
+  const [pick, setPick] = useState<Pick>(null);
   const [recipient, setRecipient] = useState('');
 
   useEffect(() => {
-    if (p && variantId == null) {
+    if (p && pick == null) {
       const best = [...p.variants].reverse().find((v) => v.inStock) ?? p.variants[0];
-      setVariantId(best?.id ?? null);
+      setPick(best?.id ?? null);
     }
-  }, [p, variantId]);
+  }, [p, pick]);
 
   if (error) return <div className="page"><div className="empty">{error}</div></div>;
   if (!p) return <div className="page"><div className="skeleton" style={{ height: 320 }} /></div>;
 
-  const v = p.variants.find((x) => x.id === variantId);
-  const recipientOk = !p.needsRecipient || /^@?[A-Za-z0-9_]{4,32}$/.test(recipient.trim());
+  const v = typeof pick === 'number' ? p.variants.find((x) => x.id === pick) : undefined;
+  const bulk = pick === 'bulk';
+  const spec = recipientSpec[p.recipientKind];
+  const recipientOk = !p.needsRecipient || spec.ok(recipient.trim());
+  const support = me.supportUsername.replace(/^@/, '');
+  const options = p.variants.length + (p.wholesale ? 1 : 0);
 
   return (
     <div className="page" style={{ paddingTop: 0, gap: 18, paddingBottom: 110 }}>
       <section style={{ position: 'relative', height: 250, margin: '0 -16px' }}>
         <div className="glow" style={{ height: 250, background: 'radial-gradient(60% 60% at 50% 55%, rgba(230,15,30,.8), rgba(120,0,10,.3) 50%, transparent 78%)' }} />
         <Key icon={p.icon} glass={p.glass} size={124} style={{ position: 'absolute', left: 'calc(50% - 62px)', top: 56, rotate: '-12deg' }} />
-        <Key icon="bolt" glass="WHITE" size={46} style={{ position: 'absolute', left: 36, top: 160, rotate: '20deg', filter: 'blur(1.5px)' }} />
-        <Key icon="pad" glass="DARK" size={52} style={{ position: 'absolute', right: 30, top: 70, rotate: '-24deg', filter: 'blur(1px)' }} />
       </section>
 
       <div>
         <div className="cap">{p.category}</div>
         <h1 className="disp" style={{ fontSize: 30, marginTop: 8 }}>{p.title}</h1>
         {p.subtitle && <p className="muted" style={{ marginTop: 6 }}>{p.subtitle}</p>}
+        {p.rating.count > 0 && (
+          <a href={`#/reviews?p=${p.id}`} className="trust" style={{ marginTop: 10 }}>
+            <span className="trust-star">★</span><b>{ratingText(p.rating.avg)}</b><span className="muted">· {reviewsWord(p.rating.count)}</span>
+          </a>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(p.variants.length, 4)}, 1fr)`, gap: 8 }} role="radiogroup" aria-label="Вариант">
+      {p.siblings.length > 1 && (
+        <div className="seg" role="tablist" aria-label="Как выдаём">
+          {p.siblings.map((s) => (
+            <button key={s.id} role="tab" aria-selected={s.id === p.id} className={s.id === p.id ? 'on' : ''} onClick={() => s.id !== p.id && swap(`/product/${s.id}`)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(options, 3)}, 1fr)`, gap: 8 }} role="radiogroup" aria-label="Вариант">
         {p.variants.map((x) => (
-          <button key={x.id} role="radio" aria-checked={x.id === variantId} disabled={!x.inStock}
-            className={`tile ${x.id === variantId ? 'on' : ''}`} style={{ opacity: x.inStock ? 1 : 0.4 }} onClick={() => setVariantId(x.id)}>
+          <button key={x.id} role="radio" aria-checked={x.id === pick} disabled={!x.inStock}
+            className={`tile ${x.id === pick ? 'on' : ''}`} style={{ opacity: x.inStock ? 1 : 0.4 }} onClick={() => setPick(x.id)}>
             <div className="disp" style={{ fontSize: 18 }}>{x.title}</div>
             <div style={{ fontSize: 12, marginTop: 2, opacity: 0.75 }}>{x.inStock ? rub(x.price) : 'нет'}</div>
           </button>
         ))}
+        {p.wholesale && (
+          <button role="radio" aria-checked={bulk} className={`tile ${bulk ? 'on' : ''}`} onClick={() => setPick('bulk')}>
+            <div className="disp" style={{ fontSize: 18 }}>Опт</div>
+            <div style={{ fontSize: 12, marginTop: 2, opacity: 0.75 }}>от 10 шт</div>
+          </button>
+        )}
       </div>
 
       {v && (
@@ -56,25 +97,65 @@ export function Product({ id }: { id: number }) {
         </div>
       )}
 
-      {p.needsRecipient && (
+      {bulk && (
+        <div className="card pad col" style={{ gap: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 17 }}>Оптом дешевле</div>
+          <p className="muted" style={{ lineHeight: 1.45 }}>
+            Берёте от 10 штук? Напишите в поддержку {support && <b style={{ color: 'var(--t)' }}>@{support}</b>}: назовите товар, срок и количество, и мы пришлём цену за штуку.
+          </p>
+        </div>
+      )}
+
+      {!bulk && p.needsRecipient && (
         <label className="field">
-          <span>Username получателя в Telegram</span>
-          <input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="@username" autoCapitalize="off" autoCorrect="off" inputMode="text" />
+          <span>{spec.label}</span>
+          <input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder={spec.placeholder}
+            autoCapitalize="off" autoCorrect="off" inputMode={spec.inputMode} autoComplete={p.recipientKind === 'PHONE' ? 'tel' : 'off'} />
         </label>
+      )}
+      {!bulk && p.needsRecipient && p.recipientKind === 'PHONE' && (recipientOk || recipient.replace(/\D/g, '').length >= 10) && (
+        // Показываем, как поняли номер: «900 123-45-67» станет +7, украинский «067…» станет +380
+        <p className="small" style={{ marginTop: -8, color: recipientOk ? 'var(--m)' : 'var(--warn)' }} aria-live="polite">
+          {recipientOk ? `Номер: ${prettyPhone(normalizePhone(recipient)!)}` : 'Не похоже на номер. Укажите код страны, например +7 900 123-45-67'}
+        </p>
+      )}
+
+      {!bulk && p.access === 'WITH_LOGIN' && (
+        <div className="note">
+          <Icon name="shield" size={20} />
+          <span>После оплаты поддержка напишет в чат заказа и попросит код входа из Telegram. Код отправляйте только в чат заказа, больше никому.</span>
+        </div>
       )}
 
       {p.description && <p className="muted" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.description}</p>}
 
       <div className="grid2" style={{ fontSize: 13, lineHeight: 1.3 }}>
-        <div className="row" style={{ gap: 10 }}><Icon name="shield" size={20} /><span className="muted">Без входа в ваш аккаунт</span></div>
+        {p.access === 'NO_LOGIN' && <div className="row" style={{ gap: 10 }}><Icon name="shield" size={20} /><span className="muted">Без входа в ваш аккаунт</span></div>}
+        {p.access === 'WITH_LOGIN' && <div className="row" style={{ gap: 10 }}><Icon name="shield" size={20} /><span className="muted">Входим только для оформления</span></div>}
         <div className="row" style={{ gap: 10 }}><Icon name="clock" size={20} /><span className="muted">Не выдали за 30 мин — вернём деньги</span></div>
       </div>
 
+      {p.reviews.length > 0 && (
+        <section className="col" aria-label="Отзывы">
+          <div className="between">
+            <h2 className="disp h2">Отзывы</h2>
+            <a href={`#/reviews?p=${p.id}`} className="small" style={{ color: 'var(--a2)', fontWeight: 600 }}>Все {p.rating.count}</a>
+          </div>
+          {p.reviews.map((r) => <ReviewCard key={r.id} r={r} />)}
+        </section>
+      )}
+
       <div className="sticky-cta">
-        <button className="btn block" style={{ height: 60, borderRadius: 20 }} disabled={!v || !recipientOk}
-          onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}`)}>
-          {p.needsRecipient && !recipientOk ? 'Укажите получателя' : `Оформить · ${v ? rub(v.price) : ''}`}
-        </button>
+        {bulk ? (
+          <button className="btn block" style={{ height: 60, borderRadius: 20 }} disabled={!support} onClick={() => openTelegramChat(support)}>
+            Написать @{support}
+          </button>
+        ) : (
+          <button className="btn block" style={{ height: 60, borderRadius: 20 }} disabled={!v || !recipientOk}
+            onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}`)}>
+            {p.needsRecipient && !recipientOk ? spec.hint : `Оформить · ${v ? rub(v.price) : ''}`}
+          </button>
+        )}
       </div>
     </div>
   );

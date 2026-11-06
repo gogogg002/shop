@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, rub, statusLabel, type AdminOrder } from '../api';
+import { api, itemTitle, prettyPhone, rub, statusLabel, type AdminOrder } from '../api';
 import { Icon, Key, useLoad, useToast } from '../ui/kit';
 
 interface Summary { revenue: number; profit: number; orders: number; queue: number; hourly: number[]; lowStock: { variantId: number; title: string; left: number }[]; slaMin: number }
@@ -110,9 +110,9 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
               <a href={`#/admin/orders/${o.id}`} className="row sp">
                 <Key icon={o.variant.product.icon} glass={o.variant.product.glass} size={42} />
                 <div className="sp">
-                  <div style={{ fontWeight: 600 }} className="ellipsis">{o.variant.product.title} · {o.variant.title}</div>
+                  <div style={{ fontWeight: 600 }} className="ellipsis">{itemTitle(o.variant.product.title, o.variant.product.access, o.variant.title)}</div>
                   <div className="muted ellipsis" style={{ fontSize: 12.5 }}>
-                    {o.recipient ?? (o.user.username ? '@' + o.user.username : o.user.firstName)} · {rub(o.amount)} · {o.method}
+                    {o.recipient ? prettyPhone(o.recipient) : o.user.username ? '@' + o.user.username : o.user.firstName} · {rub(o.amount)} · {o.method}
                   </div>
                 </div>
               </a>

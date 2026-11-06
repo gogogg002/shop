@@ -1,8 +1,10 @@
-import type { PaymentMethod, Prisma } from '@prisma/client';
+import type { OrderStatus, PaymentMethod, Prisma, RecipientKind } from '@prisma/client';
 import { prisma } from '../db.js';
 import { autoProviders, isManual } from '../payments/index.js';
 import { getSettings, type ShopSettings } from './settings.js';
 import { notifier, type OrderView } from './notify.js';
+import { normalizePhone } from './phone.js';
+import { STATUS_WORD, cleanText, orderTitle } from './labels.js';
 
 export class ShopError extends Error {
   constructor(public code: string, message: string, public status = 400) {
@@ -22,6 +24,16 @@ export function computeTotal(price: number, feePercent: number, promo?: { amount
   const afterPromo = price - discount;
   const fee = Math.round((afterPromo * feePercent) / 100);
   return { discount, fee, amount: afterPromo + fee };
+}
+
+/**
+ * Приводит получателя к одному виду: @username или +79001234567.
+ * null — если формат не подходит.
+ */
+export function normalizeRecipient(kind: RecipientKind, raw: string | undefined): string | null {
+  if (kind === 'PHONE') return normalizePhone(raw);
+  const u = (raw ?? '').trim().replace(/^@?/, '@');
+  return /^@[A-Za-z0-9_]{4,32}$/.test(u) ? u : null;
 }
 
 /** ₽ (копейки) → гривны, округление вверх до целой гривны */
@@ -70,9 +82,14 @@ export async function createOrder(input: {
   const variant = await prisma.variant.findUnique({ where: { id: input.variantId }, include: { product: true } });
   if (!variant || !variant.isActive || !variant.product.isActive) throw new ShopError('variant_unavailable', 'Товар недоступен');
 
-  const recipient = input.recipient?.trim().replace(/^@?/, '@');
-  if (variant.product.needsRecipient && (!recipient || !/^@[A-Za-z0-9_]{4,32}$/.test(recipient)))
-    throw new ShopError('bad_recipient', 'Укажите username получателя, например @durov');
+  const recipient = variant.product.needsRecipient ? normalizeRecipient(variant.product.recipientKind, input.recipient) : null;
+  if (variant.product.needsRecipient && !recipient)
+    throw new ShopError(
+      'bad_recipient',
+      variant.product.recipientKind === 'PHONE'
+        ? 'Укажите номер телефона аккаунта с кодом страны, например +7 900 123-45-67'
+        : 'Укажите username получателя, например @durov',
+    );
 
   if (input.method === 'BALANCE') throw new ShopError('method_unavailable', 'Оплата с баланса пока не подключена');
   const methodKey = input.method as keyof ShopSettings['methods'];
@@ -102,7 +119,7 @@ export async function createOrder(input: {
     data: {
       userId: input.userId,
       variantId: variant.id,
-      recipient: variant.product.needsRecipient ? recipient : null,
+      recipient,
       method: input.method,
       amount,
       discount,
@@ -137,14 +154,28 @@ export async function submitProof(orderId: number, userId: number, photo: Buffer
   if (!isManual(order.method)) throw new ShopError('bad_state', 'Этот заказ оплачивается автоматически');
   if (order.status !== 'PENDING_PAYMENT' && order.status !== 'AWAITING_CONFIRMATION')
     throw new ShopError('bad_state', 'Заказ уже обработан');
+  // Подпись проверяем до уведомления админам: ошибка после него при повторной отправке дала бы второй чек
+  const text = cleanText(note ?? '').trim();
+  if (text.length > 2000) throw new ShopError('too_long', 'Подпись к чеку длиннее 2000 символов');
 
-  const fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { status: 'AWAITING_CONFIRMATION', proofFileId: fileId ?? order.proofFileId },
+  // Сначала чек уходит админам, и только потом заказ встаёт «на проверку»: если чек не дошёл ни до кого или сервер
+  // перезапустился посреди отправки, заказ остаётся «ждёт оплаты», и покупатель может отправить чек ещё раз
+  let fileId: string | null;
+  try {
+    fileId = await notifier().manualPaymentProof({ ...order, status: 'AWAITING_CONFIRMATION' }, photo);
+  } catch (e) {
+    console.error('proof notify failed', (e as Error).message);
+    throw new ShopError('notify_failed', 'Не удалось передать чек админам. Попробуйте ещё раз через минуту', 503);
+  }
+  // Фото уходит админам по очереди, и первый может подтвердить или отклонить оплату, пока оно грузится остальным:
+  // статус меняем только из «ждёт оплаты» и «на проверке», чтобы не затереть это решение
+  const moved = await prisma.order.updateMany({
+    where: { id: orderId, userId, status: { in: ['PENDING_PAYMENT', 'AWAITING_CONFIRMATION'] } },
+    data: { status: 'AWAITING_CONFIRMATION', ...(fileId ? { proofFileId: fileId } : {}) },
   });
-  if (note?.trim()) await addMessage(orderId, { userId, text: note.trim(), fromAdmin: false });
-  return updated;
+  if (!moved.count && fileId) await prisma.order.update({ where: { id: orderId }, data: { proofFileId: fileId } });
+  if (text) await addMessage(orderId, { userId, text, fromAdmin: false });
+  return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 }
 
 /**
@@ -186,7 +217,7 @@ async function deliverCode(orderId: number) {
   });
   if (!done) return null;
   const order = (await loadOrder(orderId))!;
-  await notifier().orderStatusToUser(order, `Заказ №${order.id} выдан. Код: ${done}`);
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${orderTitle(order.variant.product, order.variant.title)}.\nКод: ${done}`);
   return order;
 }
 
@@ -194,7 +225,15 @@ export async function confirmManual(orderId: number) {
   const order = await loadOrder(orderId);
   if (!order) throw new ShopError('not_found', 'Заказ не найден', 404);
   if (!isManual(order.method)) throw new ShopError('bad_state', 'Заказ не на ручной оплате');
-  return markPaid(orderId);
+  // Кнопка «Подтвердить» есть у каждого админа. Повторное подтверждение оплаченного заказа ничего не меняет
+  // (двойное нажатие), а отклонённый или отменённый заказ подтвердить нельзя: админ должен узнать об этом,
+  // а не получить «Оплата подтверждена»
+  const closed = (status: OrderStatus) => status === 'REJECTED' || status === 'CANCELLED' || status === 'REFUNDED';
+  if (closed(order.status)) throw new ShopError('bad_state', `Заказ уже обработан: ${STATUS_WORD[order.status]}`);
+  const after = await markPaid(orderId);
+  // Другой админ отклонил заказ или покупатель отменил его между проверкой выше и оплатой
+  if (after && closed(after.status)) throw new ShopError('bad_state', `Заказ уже обработан: ${STATUS_WORD[after.status]}`);
+  return after;
 }
 
 export async function rejectManual(orderId: number, reason: string) {
@@ -212,11 +251,12 @@ export async function rejectManual(orderId: number, reason: string) {
 export async function deliver(orderId: number, text?: string) {
   const changed = await prisma.order.updateMany({
     where: { id: orderId, status: 'PAID' },
-    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text || null },
+    data: { status: 'DELIVERED', deliveredAt: new Date(), deliveredText: text ? cleanText(text) : null },
   });
   if (!changed.count) throw new ShopError('bad_state', 'Выдать можно только оплаченный заказ');
   const order = (await loadOrder(orderId))!;
-  await notifier().orderStatusToUser(order, `Заказ №${order.id} выдан${text ? `: ${text}` : ''}. Спасибо за покупку!`);
+  const what = orderTitle(order.variant.product, order.variant.title);
+  await notifier().orderDelivered(order, `✅ Заказ №${order.id} выполнен: ${what}.${text ? `\n${text}` : ''}`);
   return order;
 }
 
@@ -230,9 +270,11 @@ export async function cancelByUser(orderId: number, userId: number) {
 }
 
 export async function addMessage(orderId: number, m: { userId?: number; text: string; fromAdmin: boolean; fileId?: string }) {
-  const msg = await prisma.message.create({ data: { orderId, ...m } });
+  const text = cleanText(m.text).trim();
+  if (!text) throw new ShopError('empty', 'Напишите сообщение');
+  const msg = await prisma.message.create({ data: { orderId, ...m, text } });
   const order = await loadOrder(orderId);
-  if (order) await notifier().chatMessage(order, m.text, m.fromAdmin);
+  if (order) await notifier().chatMessage(order, text, m.fromAdmin);
   return msg;
 }
 

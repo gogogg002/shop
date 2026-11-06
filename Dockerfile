@@ -11,4 +11,6 @@ COPY --from=build /app /app
 WORKDIR /app/apps/server
 ENV NODE_ENV=production PORT=3000
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/index.js"]
+# Схема применяется при старте. SKIP_DB_PUSH=1 — запуск без неё: нужен при откате на старую версию,
+# иначе db push старой схемы попросит удалить новые таблицы и колонки и контейнер не стартует
+CMD ["sh", "-c", "if [ \"$SKIP_DB_PUSH\" != 1 ]; then npx prisma db push --skip-generate || exit 1; fi; exec node dist/index.js"]

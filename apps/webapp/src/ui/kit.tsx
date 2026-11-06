@@ -33,6 +33,31 @@ const glyphs: Record<string, ReactNode> = {
 
 export const productIcons = ['star', 'starO', 'bolt', 'pad', 'spark', 'wave', 'gift'];
 
+const STAR = 'M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6L2.5 9.3l6.6-.8z';
+
+/** Звёзды рейтинга: только показ или выбор оценки (onChange) */
+export function Stars({ value, size = 16, onChange, label = 'Оценка' }: { value: number; size?: number; onChange?: (v: number) => void; label?: string }) {
+  const filled = Math.round(value);
+  if (!onChange) {
+    return (
+      <span className="stars" role="img" aria-label={`Оценка ${value} из 5`}>
+        {[1, 2, 3, 4, 5].map((i) => (
+          <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className={i <= filled ? 'on' : ''}><path d={STAR} /></svg>
+        ))}
+      </span>
+    );
+  }
+  return (
+    <div className="stars-input" role="radiogroup" aria-label={label}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <button key={i} type="button" role="radio" aria-checked={value === i} aria-label={`${i} из 5`} className={i <= value ? 'on' : ''} onClick={() => onChange(i)}>
+          <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d={STAR} /></svg>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Icon({ name, size = 22 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{glyphs[name] ?? glyphs.star}</svg>;
 }
@@ -78,6 +103,15 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick]);
   return { data, error, reload: () => setTick((x) => x + 1), setData };
+}
+
+/** Пометка над заказом, который не удалось обновить: на экране то, что успели загрузить раньше */
+export function Stale({ error }: { error: string }) {
+  return (
+    <div className="row" role="status" style={{ background: 'rgba(255,181,71,.1)', borderRadius: 14, padding: 12, color: 'var(--warn)', fontSize: 14, lineHeight: 1.45 }}>
+      Не удалось обновить: {error}
+    </div>
+  );
 }
 
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
