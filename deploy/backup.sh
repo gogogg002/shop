@@ -7,6 +7,12 @@ set -euo pipefail
 # Папка магазина: текущая, если в ней docker-compose.yml, иначе та, где лежит скрипт
 [ -f docker-compose.yml ] || cd "$(dirname "$0")/.."
 [ -f docker-compose.yml ] || { echo "Запустите скрипт из папки магазина, где лежит docker-compose.yml" >&2; exit 1; }
+# Восстановление базы оборвалось и не закончено: в базе может быть половина бэкапа, а цепочка обновления
+# после бэкапа запустила бы на ней приложение
+if [ -e .restore-seqs ]; then
+  echo "Восстановление базы не закончено (есть $PWD/.restore-seqs). Сначала запустите его ещё раз: bash deploy/restore.sh <файл>" >&2
+  exit 1
+fi
 
 dir="${BACKUP_DIR:-$HOME/krynel-backups}"
 mkdir -p "$dir"
