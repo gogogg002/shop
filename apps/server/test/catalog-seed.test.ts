@@ -181,3 +181,19 @@ describe('своё количество: Stars и Steam', () => {
     }
   });
 });
+
+describe('короткие описания', () => {
+  it('длинный текст демо-каталога меняет на шаги, правленный админом не трогает, повтор ничего не меняет', async () => {
+    const { tg } = await oldCatalog();
+    const { SHORT_DESCRIPTIONS } = await import('../src/catalog-data.js');
+    const [oldSteam, newSteam] = SHORT_DESCRIPTIONS[3];
+    const demo = await prisma.product.create({ data: { categoryId: tg.id, title: 'Steam демо', description: oldSteam } });
+    const own = await prisma.product.create({ data: { categoryId: tg.id, title: 'Своё', description: 'Мой текст' } });
+    await migrateCatalog(quiet);
+    await migrateCatalog(quiet);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: demo.id } })).description).toBe(newSteam);
+    expect(newSteam.split('\n').length).toBeGreaterThan(1);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: own.id } })).description).toBe('Мой текст');
+    expect((await prisma.product.findFirstOrThrow({ where: { title: 'Telegram Stars' } })).description).toContain('\n');
+  });
+});

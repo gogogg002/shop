@@ -60,6 +60,8 @@ export function Product({ id }: { id: number }) {
   const perUnitText = v?.perUnit ? `${(v.price / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽ за ${isStars ? 'звезду' : '1 ₽'}` : '';
   // Один вариант со своим количеством: плитки вариантов не нужны, сразу поле ввода
   const showOptions = p.variants.length > 1 || !p.variants[0]?.perUnit || p.wholesale;
+  // Описание: строка = шаг. Старый длинный абзац без переносов покажется одним шагом
+  const steps = p.description.split('\n').map((x) => x.trim()).filter(Boolean);
 
   return (
     <div className="page" style={{ paddingTop: 8, gap: 16, paddingBottom: 130 }}>
@@ -128,7 +130,7 @@ export function Product({ id }: { id: number }) {
         <div className="card pad col" style={{ gap: 8 }}>
           <div className="disp" style={{ fontSize: 17 }}>Оптом дешевле</div>
           <p className="muted" style={{ lineHeight: 1.45 }}>
-            Берёте от 10 штук? Напишите в поддержку {support && <b style={{ color: 'var(--t)' }}>@{support}</b>}: назовите товар, срок и количество, и мы пришлём цену за штуку.
+            От 10 штук. Напишите {support && <b style={{ color: 'var(--t)' }}>@{support}</b>} товар и количество, пришлём цену.
           </p>
         </div>
       )}
@@ -147,20 +149,15 @@ export function Product({ id }: { id: number }) {
         </p>
       )}
 
-      {!bulk && p.access === 'WITH_LOGIN' && (
-        <div className="note">
-          <Icon name="shield" size={20} />
-          <span>После оплаты поддержка напишет в чат заказа и попросит код входа из Telegram. Код отправляйте только в чат заказа, больше никому.</span>
-        </div>
+      {/* Описание — короткие шаги по строке: нумерованный список читается быстрее абзаца */}
+      {!bulk && steps.length > 0 && (
+        <section className="how" aria-label="Как это работает">
+          <div className="cap">Как это работает</div>
+          <ol className="steps">
+            {steps.map((s, i) => <li key={i}><span className="n">{i + 1}</span><span>{s}</span></li>)}
+          </ol>
+        </section>
       )}
-
-      <ul className="trust-list" style={{ padding: '0 4px' }}>
-        {p.access === 'NO_LOGIN' && <li><Icon name="shield" size={20} />Без входа в ваш аккаунт</li>}
-        {p.access === 'WITH_LOGIN' && <li><Icon name="shield" size={20} />Входим только для оформления</li>}
-        {p.access === 'GIFT' && <li><Icon name="shield" size={20} />Подарком, без входа в аккаунт</li>}
-      </ul>
-
-      {p.description && <p className="muted" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap', padding: '0 4px' }}>{p.description}</p>}
 
       {p.reviews.length > 0 && (
         <section className="col" aria-label="Отзывы" style={{ marginTop: 4 }}>

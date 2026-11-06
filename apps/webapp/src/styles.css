@@ -243,3 +243,10 @@ b, strong { font-weight: 650; }
   font-size: 13.5px; font-weight: 500; color: var(--m); background: var(--s2); border: 1px solid var(--line); }
 .tag.on { color: var(--a); border-color: rgba(198,249,78,.42); background: var(--lime-tint); }
 .order-line { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px; border-radius: 18px; }
+
+/* «Как это работает»: описание товара короткими шагами */
+.how { display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
+.steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14.5px; line-height: 1.35; }
+.steps .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; margin-top: -1px;
+  font: 700 12px var(--mono); color: var(--a); border: 1px solid color-mix(in srgb, var(--a) 45%, transparent); }

@@ -1,5 +1,5 @@
 import { prisma } from './db.js';
-import { NO_LOGIN_TEXT, premiumModes, starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
+import { NO_LOGIN_TEXT, SHORT_DESCRIPTIONS, STARS_DESCRIPTION, premiumModes, starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
 
 /** Так Telegram Premium выглядел в каталоге до режимов входа: подарком на 1, 3, 6 и 12 мес */
 const OLD_GIFT = { title: 'Telegram Premium', access: 'UNSPECIFIED', subtitle: 'Подарком на аккаунт' } as const;
@@ -78,4 +78,14 @@ export async function perUnitStarsSteam(log: (m: string) => void = () => {}) {
   const steam = await prisma.product.findFirst({ where: { title: 'Пополнение Steam' }, orderBy: { id: 'asc' } });
   if (steam && (await toPerUnit(steam.id, steamPerUnit, log, 'Пополнение Steam')))
     await prisma.product.update({ where: { id: steam.id }, data: steamProduct });
+}
+
+/** Длинные описания демо-каталога → короткие шаги. Описания, которые админ уже поправил, не трогает */
+export async function shortDescriptions(log: (m: string) => void = () => {}) {
+  let n = 0;
+  for (const [old, next] of SHORT_DESCRIPTIONS) {
+    n += (await prisma.product.updateMany({ where: { description: old }, data: { description: next } })).count;
+  }
+  n += (await prisma.product.updateMany({ where: { title: 'Telegram Stars', description: '' }, data: { description: STARS_DESCRIPTION } })).count;
+  if (n) log(`Описания товаров: короткие шаги (${n})`);
 }

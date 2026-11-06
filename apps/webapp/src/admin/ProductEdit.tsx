@@ -147,7 +147,7 @@ export function ProductEdit({ id }: { id: number | null }) {
 
       <label className="field"><span>Название</span><input value={p.title} onChange={(e) => set('title', e.target.value)} placeholder="Telegram Premium" /></label>
       <label className="field"><span>Подпись в каталоге</span><input value={p.subtitle} onChange={(e) => set('subtitle', e.target.value)} placeholder="Подарком на аккаунт" /></label>
-      <label className="field"><span>Описание</span><textarea rows={3} value={p.description} onChange={(e) => set('description', e.target.value)} /></label>
+      <label className="field"><span>Как это работает: каждый шаг с новой строки, коротко</span><textarea rows={3} value={p.description} onChange={(e) => set('description', e.target.value)} /></label>
 
       <div className="row" style={{ gap: 8 }}>
         <label className="field sp"><span>Категория</span>

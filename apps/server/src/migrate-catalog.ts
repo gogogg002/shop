@@ -5,7 +5,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { prisma } from './db.js';
-import { ensurePremiumModes, noLoginByCard, perUnitStarsSteam, retireOldGiftPremium } from './catalog-sync.js';
+import { ensurePremiumModes, noLoginByCard, perUnitStarsSteam, retireOldGiftPremium, shortDescriptions } from './catalog-sync.js';
 import { getSettings, saveSettings } from './services/settings.js';
 
 export async function migrateCatalog(log: (m: string) => void = console.log) {
@@ -23,6 +23,7 @@ export async function migrateCatalog(log: (m: string) => void = console.log) {
   await ensurePremiumModes(cat.id, log);
   await noLoginByCard(log);
   await perUnitStarsSteam(log);
+  await shortDescriptions(log);
 
   // Stars отправляются по username, это всегда без входа
   const stars = await prisma.product.updateMany({ where: { title: 'Telegram Stars', access: 'UNSPECIFIED' }, data: { access: 'NO_LOGIN' } });

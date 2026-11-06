@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import type { AccessMode } from '@prisma/client';
 import { prisma } from './db.js';
 import { ensurePremiumModes } from './catalog-sync.js';
-import { starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
+import { STARS_DESCRIPTION, starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
 import { getSettings, saveSettings } from './services/settings.js';
 
 const R = (rub: number) => rub * 100;
@@ -23,7 +23,7 @@ type P = {
 
 const catalog: { slug: string; title: string; products: P[] }[] = [
   { slug: 'telegram', title: 'Telegram', products: [
-    { title: 'Telegram Stars', subtitle: 'Звёзды на аккаунт', icon: 'starO', glass: 'WHITE', access: 'NO_LOGIN', variants: [], perUnit: starsPerUnit },
+    { title: 'Telegram Stars', subtitle: 'Звёзды на аккаунт', icon: 'starO', glass: 'WHITE', access: 'NO_LOGIN', variants: [], perUnit: starsPerUnit, extra: { description: STARS_DESCRIPTION } },
   ] },
   { slug: 'ai', title: 'Нейросети', products: [
     { title: 'ChatGPT Plus', subtitle: 'Подписка на ваш аккаунт', icon: 'spark', glass: 'WHITE', variants: [['1 мес', 1990, 1700]] },
