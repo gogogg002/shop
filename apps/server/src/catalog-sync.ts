@@ -1,5 +1,5 @@
 import { prisma } from './db.js';
-import { NO_LOGIN_TEXT, SHORT_DESCRIPTIONS, STARS_DESCRIPTION, premiumModes, starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
+import { NO_LOGIN_TEXT, claudeProduct, claudeVariants, SHORT_DESCRIPTIONS, STARS_DESCRIPTION, premiumModes, starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
 
 /** Так Telegram Premium выглядел в каталоге до режимов входа: подарком на 1, 3, 6 и 12 мес */
 const OLD_GIFT = { title: 'Telegram Premium', access: 'UNSPECIFIED', subtitle: 'Подарком на аккаунт' } as const;
@@ -88,4 +88,18 @@ export async function shortDescriptions(log: (m: string) => void = () => {}) {
   }
   n += (await prisma.product.updateMany({ where: { title: 'Telegram Stars', description: '' }, data: { description: STARS_DESCRIPTION } })).count;
   if (n) log(`Описания товаров: короткие шаги (${n})`);
+}
+
+/** Claude Pro и Max в «Нейросетях». Есть товар с таким названием (в любой категории) — не трогает */
+export async function ensureClaude(log: (m: string) => void = () => {}) {
+  const exists = await prisma.product.findFirst({ where: { title: claudeProduct.title }, orderBy: { id: 'asc' } });
+  if (exists) {
+    log(`Claude: уже есть (#${exists.id}), не трогаю`);
+    return;
+  }
+  const cat = await prisma.category.upsert({
+    where: { slug: 'ai' }, create: { slug: 'ai', title: 'Нейросети', sort: 1 }, update: {},
+  });
+  const p = await prisma.product.create({ data: { ...claudeProduct, categoryId: cat.id, sort: 0, variants: { create: claudeVariants } } });
+  log(`Claude: создан #${p.id} (Pro, Max)`);
 }

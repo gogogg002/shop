@@ -7,7 +7,7 @@
 import { pathToFileURL } from 'node:url';
 import type { AccessMode } from '@prisma/client';
 import { prisma } from './db.js';
-import { ensurePremiumModes } from './catalog-sync.js';
+import { ensureClaude, ensurePremiumModes } from './catalog-sync.js';
 import { STARS_DESCRIPTION, starsPerUnit, steamPerUnit, steamProduct } from './catalog-data.js';
 import { getSettings, saveSettings } from './services/settings.js';
 
@@ -44,6 +44,7 @@ export async function seedCatalog() {
     const cat = await prisma.category.upsert({ where: { slug: c.slug }, create: { slug: c.slug, title: c.title, sort: ci }, update: {} });
 
     if (c.slug === 'telegram') await ensurePremiumModes(cat.id);
+    if (c.slug === 'ai') await ensureClaude();
 
     for (const [pi, p] of c.products.entries()) {
       // По названию во всех категориях: товар, который админ перенёс в другую категорию, не дублируем

@@ -84,3 +84,19 @@ export const SHORT_DESCRIPTIONS: [string, string][] = [
   ['Premium приходит подарком на указанный @username. Вход в аккаунт не нужен.', premiumModes[2].description],
   ['Укажите логин Steam (тот, что вводите при входе, не никнейм) и сумму пополнения. Цена: сумма + 10%.', steamProduct.description],
 ];
+
+/** Claude (Anthropic): выдача картой, без входа — как Telegram Premium «Без входа». Цены и закупка от владельца */
+export const claudeProduct = {
+  title: 'Claude',
+  subtitle: 'Выдача картой, без входа',
+  description: 'Оплачиваете заказ\nПолучаете карту в чате заказа\nОформляете Claude сами, вход не нужен',
+  icon: 'spark',
+  glass: 'DARK' as const,
+  access: 'NO_LOGIN' as const,
+  needsRecipient: false,
+  deliveryType: 'MANUAL' as const,
+};
+export const claudeVariants = [
+  { title: 'Pro', price: R(2300), cost: R(1966), oldPrice: null, sort: 0 },
+  { title: 'Max', price: R(10500), cost: R(9830), oldPrice: null, sort: 1 },
+];

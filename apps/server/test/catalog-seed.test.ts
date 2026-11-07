@@ -38,7 +38,7 @@ describe('демо-каталог', () => {
     await seedCatalog();
     await seedCatalog();
     expect(await active()).toEqual([
-      'ChatGPT Plus|UNSPECIFIED', 'Discord Nitro|UNSPECIFIED', 'Telegram Premium|GIFT', 'Telegram Premium|NO_LOGIN', 'Telegram Premium|WITH_LOGIN',
+      'ChatGPT Plus|UNSPECIFIED', 'Claude|NO_LOGIN', 'Discord Nitro|UNSPECIFIED', 'Telegram Premium|GIFT', 'Telegram Premium|NO_LOGIN', 'Telegram Premium|WITH_LOGIN',
       'Telegram Stars|NO_LOGIN', 'Пополнение Steam|UNSPECIFIED',
     ]);
   });
@@ -66,7 +66,7 @@ describe('обновление живой базы', () => {
     await migrateCatalog(quiet);
     await migrateCatalog(quiet);
     expect(await prisma.product.findUnique({ where: { id: gift.id } })).toBeNull();
-    expect(await active()).toEqual(['Telegram Premium|GIFT', 'Telegram Premium|NO_LOGIN', 'Telegram Premium|WITH_LOGIN', 'Telegram Stars|NO_LOGIN']);
+    expect(await active()).toEqual(['Claude|NO_LOGIN', 'Telegram Premium|GIFT', 'Telegram Premium|NO_LOGIN', 'Telegram Premium|WITH_LOGIN', 'Telegram Stars|NO_LOGIN']);
   });
 
   it('старый Premium с заказами скрывает, а не удаляет', async () => {
