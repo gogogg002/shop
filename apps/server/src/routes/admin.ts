@@ -5,7 +5,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { requireAdmin } from '../auth/plugin.js';
 import { getSettings, saveSettings } from '../services/settings.js';
-import { ShopError, addMessage, confirmManual, deliver, rejectManual } from '../services/orders.js';
+import { ShopError, addMessage, confirmManual, deliver, issue, rejectManual } from '../services/orders.js';
 import { bodyId, dbId, int4, pathId } from './ids.js';
 
 const idParam = (req: { params: unknown }) => pathId(req);
@@ -37,7 +37,7 @@ export async function adminRoutes(app: FastifyInstance) {
       SELECT v.id AS "variantId", p.title || ' · ' || v.title AS title, COUNT(c.id) AS left
       FROM "Variant" v JOIN "Product" p ON p.id = v."productId"
       LEFT JOIN "Code" c ON c."variantId" = v.id AND c."orderId" IS NULL
-      WHERE p."deliveryType" = 'CODES' AND p."isActive" GROUP BY v.id, p.title, v.title HAVING COUNT(c.id) < 5`;
+      WHERE p."deliveryType" = 'CODES' AND p."isActive" AND v."isActive" AND NOT v."perUnit" GROUP BY v.id, p.title, v.title HAVING COUNT(c.id) < 5`;
     return {
       revenue, profit, orders: today.length, queue, hourly,
       lowStock: lowStock.map((r) => ({ ...r, left: Number(r.left) })),
@@ -87,6 +87,10 @@ export async function adminRoutes(app: FastifyInstance) {
     const { text } = z.object({ text: z.string().max(2000).optional() }).parse(req.body ?? {});
     return deliver(idParam(req), text);
   });
+  app.post('/api/admin/orders/:id/issue', async (req) => {
+    const { text } = z.object({ text: z.string().trim().min(1).max(2000) }).parse(req.body);
+    return issue(idParam(req), text);
+  });
   app.post('/api/admin/orders/:id/messages', async (req) => {
     const { text } = z.object({ text: z.string().trim().min(1).max(2000) }).parse(req.body);
     return addMessage(idParam(req), { userId: req.user.id, text, fromAdmin: true });
@@ -128,8 +132,8 @@ export async function adminRoutes(app: FastifyInstance) {
     glass: z.enum(['RED', 'WHITE', 'DARK']).default('RED'),
     deliveryType: z.enum(['MANUAL', 'CODES']).default('MANUAL'),
     needsRecipient: z.boolean().default(true),
-    recipientKind: z.enum(['USERNAME', 'PHONE']).default('USERNAME'),
-    access: z.enum(['UNSPECIFIED', 'NO_LOGIN', 'WITH_LOGIN']).default('UNSPECIFIED'),
+    recipientKind: z.enum(['USERNAME', 'PHONE', 'STEAM']).default('USERNAME'),
+    access: z.enum(['UNSPECIFIED', 'NO_LOGIN', 'WITH_LOGIN', 'GIFT']).default('UNSPECIFIED'),
     wholesale: z.boolean().default(false),
     isActive: z.boolean().default(true),
     isHit: z.boolean().default(false),
@@ -153,6 +157,11 @@ export async function adminRoutes(app: FastifyInstance) {
     cost: int4.min(0).default(0),
     isActive: z.boolean().default(true),
     sort: int4.default(0),
+    // своё количество: price и cost за единицу
+    perUnit: z.boolean().optional(),
+    unit: z.string().trim().max(20).optional(),
+    minQty: int4.positive().optional(),
+    maxQty: int4.positive().optional(),
   });
   app.post('/api/admin/products/:id/variants', async (req) =>
     prisma.variant.create({ data: { ...variantBody.parse(req.body), productId: idParam(req) } }));
@@ -168,6 +177,9 @@ export async function adminRoutes(app: FastifyInstance) {
   /** Загрузка кодов: по одному в строке */
   app.post('/api/admin/variants/:id/codes', async (req) => {
     const { codes } = z.object({ codes: z.string() }).parse(req.body);
+    // Код на фиксированную сумму к варианту со своим количеством выдался бы на любую сумму
+    const variant = await prisma.variant.findUnique({ where: { id: idParam(req) } });
+    if (variant?.perUnit) throw new ShopError('per_unit_codes', 'К варианту со своим количеством коды не загружаются');
     const values = [...new Set(codes.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
     const r = await prisma.code.createMany({ data: values.map((value) => ({ value, variantId: idParam(req) })) });
     return { added: r.count };
@@ -197,7 +209,7 @@ export async function adminRoutes(app: FastifyInstance) {
         include: {
           user: { select: { tgId: true, username: true, firstName: true } },
           product: { select: { title: true, access: true, icon: true, glass: true } },
-          order: { select: { id: true, variant: { select: { title: true } } } },
+          order: { select: { id: true, quantity: true, variant: { select: { title: true, perUnit: true, unit: true } } } },
         },
       }),
       prisma.review.aggregate({ _avg: { rating: true }, _count: { _all: true } }),

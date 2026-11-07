@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, itemTitle, prettyPhone, rub, statusLabel, type AdminOrder } from '../api';
+import { api, itemTitle, variantText, orderStatus, prettyPhone, rub, type AdminOrder } from '../api';
 import { Icon, Key, useLoad, useToast } from '../ui/kit';
 
 interface Summary { revenue: number; profit: number; orders: number; queue: number; hourly: number[]; lowStock: { variantId: number; title: string; left: number }[]; slaMin: number }
@@ -45,7 +45,7 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
     try {
       if (o.status === 'AWAITING_CONFIRMATION') await api(`/api/admin/orders/${o.id}/confirm`, { body: {} });
       else await api(`/api/admin/orders/${o.id}/deliver`, { body: {} });
-      toast(o.status === 'AWAITING_CONFIRMATION' ? `Оплата №${o.id} подтверждена` : `Заказ №${o.id} выдан`);
+      toast(o.status === 'AWAITING_CONFIRMATION' ? `Оплата №${o.id} подтверждена` : `Заказ №${o.id} завершён`);
       orders.reload();
       summary.reload();
     } catch (e) {
@@ -61,13 +61,13 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
       <div className="glow" />
       <div className="between">
         <h1 className="disp" style={{ fontSize: 34 }}>{queueOnly ? 'Сегодня' : 'Заказы'}</h1>
-        <a href="#/" className="pill a">В магазин</a>
+        <span className="pill a mono" style={{ letterSpacing: '.08em' }}>ADMIN</span>
       </div>
 
       {queueOnly && s && (
         <>
           <div className="card pad">
-            <div className="between"><span className="cap">Выручка</span><span className="muted small">прибыль {rub(s.profit)}</span></div>
+            <div className="between"><span className="cap">Выручка</span></div>
             <div className="disp" style={{ fontSize: 40, marginTop: 6 }}>{rub(s.revenue)}</div>
             <svg viewBox="0 0 340 70" width="100%" height="70" style={{ marginTop: 12, display: 'block' }} role="img" aria-label="Выручка по часам">
               {s.hourly.map((v, i) => {
@@ -110,15 +110,16 @@ export function Dashboard({ queueOnly }: { queueOnly: boolean }) {
               <a href={`#/admin/orders/${o.id}`} className="row sp">
                 <Key icon={o.variant.product.icon} glass={o.variant.product.glass} size={42} />
                 <div className="sp">
-                  <div style={{ fontWeight: 600 }} className="ellipsis">{itemTitle(o.variant.product.title, o.variant.product.access, o.variant.title)}</div>
+                  <div style={{ fontWeight: 600 }} className="ellipsis">{itemTitle(o.variant.product.title, o.variant.product.access, variantText(o.variant, o.quantity))}</div>
                   <div className="muted ellipsis" style={{ fontSize: 12.5 }}>
                     {o.recipient ? prettyPhone(o.recipient) : o.user.username ? '@' + o.user.username : o.user.firstName} · {rub(o.amount)} · {o.method}
                   </div>
                 </div>
               </a>
-              {o.status === 'PAID' && o.paidAt && s ? <Timer from={o.paidAt} sla={s.slaMin} /> : <span className={`pill ${statusLabel[o.status].tone}`}>{statusLabel[o.status].text}</span>}
+              {/* Таймер выдачи идёт, пока клиенту ничего не выдали; выданный, но не завершённый заказ — «В работе» */}
+              {o.status === 'PAID' && !o.deliveredText && o.paidAt && s ? <Timer from={o.paidAt} sla={s.slaMin} /> : <span className={`pill ${orderStatus(o).tone}`}>{orderStatus(o).text}</span>}
               {(o.status === 'PAID' || o.status === 'AWAITING_CONFIRMATION') && (
-                <button className="btn icon sm" onClick={() => quick(o)} aria-label={o.status === 'PAID' ? 'Выдано' : 'Подтвердить оплату'}><Icon name="check" size={18} /></button>
+                <button className="btn icon sm" onClick={() => quick(o)} aria-label={o.status === 'PAID' ? 'Завершить заказ' : 'Подтвердить оплату'}><Icon name="check" size={18} /></button>
               )}
             </div>
           ))}

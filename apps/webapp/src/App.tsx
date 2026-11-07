@@ -101,10 +101,10 @@ const MeCtx = createContext<Me | null>(null);
 export const useMe = () => useContext(MeCtx);
 
 function Nav({ admin, isAdmin, path }: { admin: boolean; isAdmin: boolean; path: string }) {
-  // Админу вход в админку виден сразу, в нижней панели витрины; обратно в витрину — кнопка на сводке
+  // Админу вход в админку — первой кнопкой на витрине, а из админки — обратно на витрину
   const items = admin
-    ? [['/admin', 'chart', 'Сводка'], ['/admin/orders', 'list', 'Заказы'], ['/admin/products', 'box', 'Товары'], ['/admin/reviews', 'starO', 'Отзывы'], ['/admin/settings', 'gear', 'Настройки']]
-    : [['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы'], ...(isAdmin ? [['/admin', 'shield', 'Админка']] : [])];
+    ? [['/', 'gem', 'Витрина'], ['/admin', 'chart', 'Сводка'], ['/admin/orders', 'list', 'Заказы'], ['/admin/products', 'box', 'Товары'], ['/admin/reviews', 'starO', 'Отзывы'], ['/admin/settings', 'gear', 'Настройки']]
+    : [...(isAdmin ? [['/admin', 'gear', 'Админка']] : []), ['/', 'gem', 'Витрина'], ['/orders', 'list', 'Заказы']];
   const active = (to: string) => (to === '/' || to === '/admin' ? path === to : path.startsWith(to));
   return (
     <nav className="nav" aria-label="Разделы">
@@ -157,7 +157,7 @@ export function App() {
   let showNav = true;
   if (!isAdminPath) {
     if (seg[0] === 'product') { screen = <Product key={seg[1]} id={Number(seg[1])} />; showNav = false; }
-    else if (seg[0] === 'checkout') { screen = <Checkout variantId={Number(query.get('v'))} recipient={query.get('r') ?? ''} />; showNav = false; }
+    else if (seg[0] === 'checkout') { screen = <Checkout variantId={Number(query.get('v'))} recipient={query.get('r') ?? ''} quantity={Number(query.get('q')) || undefined} />; showNav = false; }
     else if (seg[0] === 'orders' && seg[1] && seg[2] === 'review') { screen = <Review orderId={Number(seg[1])} preset={Number(query.get('r')) || 0} />; showNav = false; }
     else if (seg[0] === 'orders' && seg[1]) { screen = <Order id={Number(seg[1])} />; showNav = false; }
     else if (seg[0] === 'reviews') { screen = <Reviews productId={Number(query.get('p')) || null} />; showNav = false; }

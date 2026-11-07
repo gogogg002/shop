@@ -38,10 +38,10 @@ async function startButtons(from: number) {
 }
 
 describe('/start', () => {
-  it('админу сразу кнопка «Админка» рядом с магазином', async () => {
+  it('админу первой кнопкой «Админка», под ней магазин', async () => {
     const buttons = await startButtons(ADMIN);
-    expect(buttons.map((b) => b[0])).toEqual(['Открыть магазин', 'Админка']);
-    expect(buttons[1][1]).toMatch(/\/#\/admin$/);
+    expect(buttons.map((b) => b[0])).toEqual(['⚙️ Админка', 'Открыть магазин']);
+    expect(buttons[0][1]).toMatch(/\/#\/admin$/);
   });
 
   it('покупателю только магазин', async () => {

@@ -19,6 +19,10 @@ const recipientSpec = {
     // так же, как сервер: номер без кода страны, который нельзя понять однозначно, не пропускаем
     ok: (v: string) => normalizePhone(v) !== null, hint: 'Укажите номер с кодом страны',
   },
+  STEAM: {
+    label: 'Логин Steam (не никнейм)', placeholder: 'login', inputMode: 'text' as const,
+    ok: (v: string) => /^[A-Za-z0-9_.-]{2,64}$/.test(v), hint: 'Укажите логин Steam',
+  },
 };
 
 export function Product({ id }: { id: number }) {
@@ -26,6 +30,7 @@ export function Product({ id }: { id: number }) {
   const { data: p, error } = useLoad(() => api<ProductView>(`/api/products/${id}`), [id]);
   const [pick, setPick] = useState<Pick>(null);
   const [recipient, setRecipient] = useState('');
+  const [qtyRaw, setQtyRaw] = useState('');
 
   useEffect(() => {
     if (p && pick == null) {
@@ -45,6 +50,18 @@ export function Product({ id }: { id: number }) {
   const options = p.variants.length + (p.wholesale ? 1 : 0);
 
   const save = v?.oldPrice && v.oldPrice > v.price ? Math.round((1 - v.price / v.oldPrice) * 100) : 0;
+  // Своё количество (звёзды, рубли Steam): цена = количество × цена за единицу
+  const qty = Number(qtyRaw.replace(/\s/g, ''));
+  // «500,00» или «250.5» не склеиваем в 50000 и 2505: просим целое число
+  const qtyFraction = /[.,]/.test(qtyRaw);
+  const qtyOk = !v?.perUnit || (/^[\d\s]+$/.test(qtyRaw) && Number.isInteger(qty) && qty >= v.minQty && qty <= v.maxQty);
+  const total = v ? (v.perUnit ? (qtyOk ? v.price * qty : 0) : v.price) : 0;
+  const isStars = v?.unit === 'Stars';
+  const perUnitText = v?.perUnit ? `${(v.price / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽ за ${isStars ? 'звезду' : '1 ₽'}` : '';
+  // Один вариант со своим количеством: плитки вариантов не нужны, сразу поле ввода
+  const showOptions = p.variants.length > 1 || !p.variants[0]?.perUnit || p.wholesale;
+  // Описание: строка = шаг. Старый длинный абзац без переносов покажется одним шагом
+  const steps = p.description.split('\n').map((x) => x.trim()).filter(Boolean);
 
   return (
     <div className="page" style={{ paddingTop: 8, gap: 16, paddingBottom: 130 }}>
@@ -70,7 +87,7 @@ export function Product({ id }: { id: number }) {
         </div>
       )}
 
-      <div className="opts" role="radiogroup" aria-label="Вариант" style={p.variants.length === 1 ? { gridTemplateColumns: '1fr' } : undefined}>
+      {showOptions && <div className="opts" role="radiogroup" aria-label="Вариант" style={p.variants.length === 1 ? { gridTemplateColumns: '1fr' } : undefined}>
         {p.variants.map((x) => {
           const off = x.oldPrice && x.oldPrice > x.price ? Math.round((1 - x.price / x.oldPrice) * 100) : 0;
           return (
@@ -88,15 +105,23 @@ export function Product({ id }: { id: number }) {
             {support && <span className="wh-r">@{support}<Icon name="chev" size={14} /></span>}
           </button>
         )}
-      </div>
+      </div>}
+
+      {v?.perUnit && !bulk && (
+        <label className="field">
+          <span>{isStars ? 'Сколько звёзд' : 'Сумма пополнения, ₽'} · от {v.minQty.toLocaleString('ru-RU')} до {v.maxQty.toLocaleString('ru-RU')}</span>
+          <input value={qtyRaw} onChange={(e) => setQtyRaw(e.target.value.replace(/[^\d\s.,]/g, ''))}
+            placeholder={isStars ? '500' : '1000'} inputMode="numeric" aria-label={isStars ? 'Количество звёзд' : 'Сумма пополнения'} />
+        </label>
+      )}
 
       {v && (
         <div className="between" style={{ alignItems: 'center', padding: '2px 4px 0' }}>
           <div>
-            <div className="price-xl">{rub(v.price)}</div>
+            <div className="price-xl">{v.perUnit ? (total ? rub(total) : '—') : rub(v.price)}</div>
+            {v.perUnit && <div className="muted small" style={{ marginTop: 8 }}>{perUnitText}</div>}
             {save > 0 && <div className="muted small" style={{ marginTop: 8 }}><s>{rub(v.oldPrice!)}</s> · экономия {rub(v.oldPrice! - v.price)}</div>}
           </div>
-          <span className="eta"><Icon name="bolt" size={14} />{p.deliveryType === 'CODES' ? 'сразу' : '≈ 5 мин'}</span>
         </div>
       )}
 
@@ -104,7 +129,7 @@ export function Product({ id }: { id: number }) {
         <div className="card pad col" style={{ gap: 8 }}>
           <div className="disp" style={{ fontSize: 17 }}>Оптом дешевле</div>
           <p className="muted" style={{ lineHeight: 1.45 }}>
-            Берёте от 10 штук? Напишите в поддержку {support && <b style={{ color: 'var(--t)' }}>@{support}</b>}: назовите товар, срок и количество, и мы пришлём цену за штуку.
+            От 10 штук. Напишите товар и количество, пришлём цену.
           </p>
         </div>
       )}
@@ -123,20 +148,15 @@ export function Product({ id }: { id: number }) {
         </p>
       )}
 
-      {!bulk && p.access === 'WITH_LOGIN' && (
-        <div className="note">
-          <Icon name="shield" size={20} />
-          <span>После оплаты поддержка напишет в чат заказа и попросит код входа из Telegram. Код отправляйте только в чат заказа, больше никому.</span>
-        </div>
+      {/* Описание — короткие шаги по строке: нумерованный список читается быстрее абзаца */}
+      {!bulk && steps.length > 0 && (
+        <section className="how" aria-label="Как это работает">
+          <div className="cap">Как это работает</div>
+          <ol className="steps">
+            {steps.map((s, i) => <li key={i}><span className="n">{i + 1}</span><span>{s}</span></li>)}
+          </ol>
+        </section>
       )}
-
-      <ul className="trust-list" style={{ padding: '0 4px' }}>
-        {p.access === 'NO_LOGIN' && <li><Icon name="shield" size={20} />Без входа в ваш аккаунт</li>}
-        {p.access === 'WITH_LOGIN' && <li><Icon name="shield" size={20} />Входим только для оформления</li>}
-        <li><Icon name="clock" size={20} />Не выдали за 30 минут — вернём деньги</li>
-      </ul>
-
-      {p.description && <p className="muted" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap', padding: '0 4px' }}>{p.description}</p>}
 
       {p.reviews.length > 0 && (
         <section className="col" aria-label="Отзывы" style={{ marginTop: 4 }}>
@@ -157,9 +177,11 @@ export function Product({ id }: { id: number }) {
             Написать @{support}
           </button>
         ) : (
-          <button className="btn block" disabled={!v || !recipientOk}
-            onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}`)}>
-            {p.needsRecipient && !recipientOk ? spec.hint : <span>Оформить <span className="dot">·</span> {v ? rub(v.price) : ''}</span>}
+          <button className="btn block" disabled={!v || !recipientOk || !qtyOk}
+            onClick={() => go(`/checkout?v=${v!.id}&r=${encodeURIComponent(recipient.trim())}${v!.perUnit ? `&q=${qty}` : ''}`)}>
+            {!qtyOk ? (qtyFraction ? `Без точек и запятых, например ${isStars ? '500' : '1000'}` : isStars ? 'Укажите количество звёзд' : 'Укажите сумму')
+              : p.needsRecipient && !recipientOk ? spec.hint
+              : <span>Оформить <span className="dot">·</span> {v ? rub(total) : ''}</span>}
           </button>
         )}
       </div>

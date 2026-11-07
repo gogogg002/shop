@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-const NETWORK_TEXT = 'Нет связи с магазином. Проверьте интернет и попробуйте ещё раз';
+const NETWORK_TEXT = 'Нет связи с магазином. Проверьте интернет';
 /** Ответ не дошёл: запрос мог и выполниться на сервере */
 export const isNetwork = (e: unknown) => e instanceof ApiError && e.code === 'network';
 
@@ -73,11 +73,13 @@ export async function copy(text: string) {
 
 // ---- типы ответов API ----
 export type Glass = 'RED' | 'WHITE' | 'DARK';
-export type Access = 'UNSPECIFIED' | 'NO_LOGIN' | 'WITH_LOGIN';
-export type RecipientKind = 'USERNAME' | 'PHONE';
-export const accessLabel: Record<Access, string> = { UNSPECIFIED: '', NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом' };
+export type Access = 'UNSPECIFIED' | 'NO_LOGIN' | 'WITH_LOGIN' | 'GIFT';
+export type RecipientKind = 'USERNAME' | 'PHONE' | 'STEAM';
+export const accessLabel: Record<Access, string> = { UNSPECIFIED: '', NO_LOGIN: 'Без входа', WITH_LOGIN: 'Со входом', GIFT: 'Подарком' };
 /** +79001234567 → «+7 900 123-45-67», +380671234567 → «+380 67 123 45 67», остальные как есть */
 export function prettyPhone(e164: string) {
+  // Телефоны сервер хранит с «+». Логин Steam из одних цифр, похожий на номер, показываем как есть
+  if (!e164.startsWith('+')) return e164;
   const d = e164.replace(/^\+/, '');
   if (/^7\d{10}$/.test(d)) return `+7 ${d.slice(1, 4)} ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
   if (/^380\d{9}$/.test(d)) return `+380 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8, 10)} ${d.slice(10)}`;
@@ -111,7 +113,11 @@ export interface ProductView {
   id: number; title: string; subtitle: string; description: string; icon: string; glass: Glass; category: string;
   needsRecipient: boolean; recipientKind: RecipientKind; deliveryType: 'MANUAL' | 'CODES'; access: Access; wholesale: boolean;
   siblings: { id: number; access: Access; label: string }[];
-  variants: { id: number; title: string; price: number; oldPrice: number | null; inStock: boolean }[];
+  variants: {
+    id: number; title: string; price: number; oldPrice: number | null; inStock: boolean;
+    /** своё количество: price — за единицу, покупатель вводит minQty..maxQty */
+    perUnit: boolean; unit: string; minQty: number; maxQty: number;
+  }[];
   rating: Rating;
   reviews: PublicReview[];
 }
@@ -165,6 +171,10 @@ export const statusLabel: Record<OrderStatus, { text: string; tone: 'ok' | 'warn
   REFUNDED: { text: 'Возврат', tone: 'info' },
 };
 
+/** Статус для показа: данные уже выданы, но заказ не завершён — «В работе», а не «Выдаём» */
+export const orderStatus = (o: { status: OrderStatus; deliveredText: string | null }) =>
+  o.status === 'PAID' && o.deliveredText ? { text: 'В работе', tone: 'warn' as const } : statusLabel[o.status];
+
 /** Картинка, которую сервер отдаёт только с авторизацией (чек оплаты) */
 export async function apiBlobUrl(path: string): Promise<string> {
   const headers: Record<string, string> = {};
@@ -180,13 +190,17 @@ export interface AdminReview {
   editCount: number; activityAt: string;
   user: { tgId: string; username: string | null; firstName: string | null };
   product: { title: string; access: Access; icon: string; glass: Glass };
-  order: { id: number; variant: { title: string } };
+  order: { id: number; quantity: number; variant: { title: string; perUnit: boolean; unit: string } };
 }
+
+/** «12 мес» или «750 Stars» для варианта со своим количеством */
+export const variantText = (v: { title: string; perUnit?: boolean; unit?: string }, quantity = 1) =>
+  v.perUnit ? `${quantity.toLocaleString('ru-RU')} ${v.unit ?? ''}`.trim() : v.title;
 
 export interface AdminOrder {
   id: number; status: OrderStatus; method: Method; amount: number; cost: number; payAmount: string | null; recipient: string | null;
-  createdAt: string; paidAt: string | null; deliveredText: string | null; proofFileId: string | null;
+  createdAt: string; paidAt: string | null; deliveredText: string | null; proofFileId: string | null; quantity: number;
   user: { tgId: string; username: string | null; firstName: string | null };
-  variant: { title: string; product: { title: string; icon: string; glass: Glass; deliveryType: 'MANUAL' | 'CODES'; access: Access } };
+  variant: { title: string; perUnit: boolean; unit: string; product: { title: string; icon: string; glass: Glass; deliveryType: 'MANUAL' | 'CODES'; access: Access } };
   messages?: { id: number; text: string; fromAdmin: boolean; createdAt: string }[];
 }

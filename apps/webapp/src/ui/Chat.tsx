@@ -38,7 +38,7 @@ export function Chat({ messages, onSend, asAdmin, title }: {
   return (
     <section className="card pad col" aria-label={title}>
       <div className="cap">{title}</div>
-      {!messages.length && <div className="muted small">Сообщений пока нет. Вопрос по заказу можно задать здесь.</div>}
+      {!messages.length && <div className="muted small">Сообщений пока нет</div>}
       <div className="col" style={{ gap: 6 }}>
         {messages.map((m) => (
           <div key={m.id} className={`chatline ${m.fromAdmin === asAdmin ? 'me' : 'them'}`}>{m.text}</div>

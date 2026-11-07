@@ -3,6 +3,7 @@ import { accessLabel, api, ratingText, reviewsWord, rub, type CatalogCategory, t
 import { Icon, useLoad } from '../ui/kit';
 import { Brand, CrystalCover, Druse, FacetStar, glyphOf, tintOf } from '../ui/Crystal';
 import { useMe } from '../App';
+import { matches, searchText } from '../search';
 
 export function Catalog({ category }: { category: string | null }) {
   const me = useMe()!;
@@ -11,9 +12,10 @@ export function Catalog({ category }: { category: string | null }) {
   const [q, setQ] = useState('');
 
   const products = useMemo(() => {
-    const all = (data ?? []).flatMap((c) => c.products.map((p) => ({ ...p, cat: c.slug })));
-    const needle = q.trim().toLowerCase();
-    return all.filter((p) => (!category || p.cat === category) && (!needle || `${p.title} ${p.subtitle}`.toLowerCase().includes(needle)));
+    const all = (data ?? []).flatMap((c) => c.products.map((p) => ({
+      ...p, cat: c.slug, hay: searchText(p.title, p.subtitle, c.title, ...p.modes.map((m) => accessLabel[m])),
+    })));
+    return all.filter((p) => (!category || p.cat === category) && matches(p.hay, q));
   }, [data, q, category]);
 
   const rating = feed.data?.summary;
@@ -36,7 +38,7 @@ export function Catalog({ category }: { category: string | null }) {
 
       <section style={{ padding: '18px 4px 0', minHeight: 196 }} aria-label="Витрина">
         <h1 className="hero-title">Кристально<br />просто</h1>
-        <p className="hero-sub" style={{ marginTop: 34 }}>Telegram, Discord, Steam и нейросети. Оплата СБП, криптой или гривнами.</p>
+        <p className="hero-sub" style={{ marginTop: 34 }}>Оплата СБП, криптой или гривнами.</p>
       </section>
 
       <label className="search" style={{ marginTop: 16 }}>
@@ -56,7 +58,7 @@ export function Catalog({ category }: { category: string | null }) {
 
       {error && <div className="empty">{error}</div>}
       {!data && !error && <div className="svc-grid" style={{ marginTop: 16 }}>{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 106 }} />)}</div>}
-      {data && !products.length && <div className="empty">Ничего не нашли. Попробуйте другое название.</div>}
+      {data && !products.length && <div className="empty">Ничего не нашли</div>}
 
       {products.length > 0 && (
         <section className="svc-grid" style={{ marginTop: 16 }} aria-label="Сервисы">

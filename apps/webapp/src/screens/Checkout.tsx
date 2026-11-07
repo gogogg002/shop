@@ -12,7 +12,7 @@ interface Quote {
 const shownRecipient = (q: Quote, raw: string) =>
   q.recipient ? (q.recipientKind === 'PHONE' ? prettyPhone(q.recipient) : q.recipient) : raw;
 
-export function Checkout({ variantId, recipient }: { variantId: number; recipient: string }) {
+export function Checkout({ variantId, recipient, quantity }: { variantId: number; recipient: string; quantity?: number }) {
   const me = useMe()!;
   const toast = useToast();
   const [method, setMethod] = useState<Method | null>(me.methods[0]?.method ?? null);
@@ -23,26 +23,26 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
 
   useEffect(() => {
     if (!method) return;
-    api<Quote>('/api/orders/quote', { body: { variantId, method, promoCode: appliedPromo || undefined, recipient: recipient || undefined } })
+    api<Quote>('/api/orders/quote', { body: { variantId, method, quantity, promoCode: appliedPromo || undefined, recipient: recipient || undefined } })
       .then(setQuote)
       .catch((e: ApiError) => {
         if (e.code === 'bad_promo') { setAppliedPromo(''); toast(e.message, true); } else toast(e.message, true);
       });
-  }, [variantId, method, appliedPromo, recipient, toast]);
+  }, [variantId, method, appliedPromo, recipient, quantity, toast]);
 
   async function pay() {
     if (!method) return;
     setBusy(true);
     try {
       const o = await api<{ id: number; payUrl: string | null }>('/api/orders', {
-        body: { variantId, method, recipient: recipient || undefined, promoCode: appliedPromo || undefined },
+        body: { variantId, method, quantity, recipient: recipient || undefined, promoCode: appliedPromo || undefined },
       });
       tg?.HapticFeedback?.notificationOccurred('success');
       if (o.payUrl) openPay(o.payUrl);
       go(`/orders/${o.id}`);
     } catch (e) {
       // Ответ мог потеряться, когда заказ уже создан: второе нажатие создало бы ещё один
-      toast(isNetwork(e) ? 'Связь оборвалась, заказ мог уже создаться. Проверьте «Заказы», прежде чем оплачивать ещё раз' : (e as Error).message, true);
+      toast(isNetwork(e) ? 'Связь оборвалась, заказ мог уже создаться. Сначала проверьте «Заказы»' : (e as Error).message, true);
       setBusy(false);
     }
   }
@@ -98,9 +98,6 @@ export function Checkout({ variantId, recipient }: { variantId: number; recipien
       </div>
 
       <div className="sticky-cta">
-        <div className="row muted" style={{ justifyContent: 'center', gap: 6, fontSize: 12, marginBottom: 10 }}>
-          <Icon name="shield" size={14} />Не выдали за 30 минут — вернём деньги
-        </div>
         <button className="btn block" style={{ height: 60, borderRadius: 20 }} disabled={!quote || busy} onClick={pay}>
           {busy ? 'Создаём заказ…' : quote ? `Оплатить ${rub(quote.amount)}` : 'Считаем…'}
         </button>

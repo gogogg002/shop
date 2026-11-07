@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, copy, isNetwork, itemTitle, methodLabel, openPay, prettyPhone, rub, statusLabel, type OrderView } from '../api';
+import { api, copy, isNetwork, itemTitle, methodLabel, openPay, orderStatus, prettyPhone, rub, type OrderView } from '../api';
 import { Icon, Key, Stale, Stars, useLoad, useToast } from '../ui/kit';
 import { go } from '../App';
 import { arrived, Chat } from '../ui/Chat';
@@ -26,7 +26,7 @@ export function Order({ id }: { id: number }) {
   // бы ошибкой, и вместе с чатом пропал бы недописанный текст
   if (!o) return <div className="page">{error ? <div className="empty">{error}</div> : <div className="skeleton" style={{ height: 300 }} />}</div>;
 
-  const st = statusLabel[o.status];
+  const st = orderStatus(o);
 
   async function sendProof() {
     setBusy('proof');
@@ -35,14 +35,14 @@ export function Order({ id }: { id: number }) {
       if (photo) form.append('file', photo);
       const r = await api<{ status: OrderView['status'] }>(`/api/orders/${id}/proof`, { method: 'POST', form });
       // Админ мог решить, пока чек ещё уходил другим админам: тогда новый статус покажет сам заказ
-      if (r.status === 'AWAITING_CONFIRMATION') toast('Отправили на проверку. Обычно это занимает до 15 минут');
+      if (r.status === 'AWAITING_CONFIRMATION') toast('Чек отправлен на проверку');
       // Форма чека пропадает сразу, не дожидаясь перезагрузки: второе нажатие не отправит чек ещё раз
       setData((d) => d && { ...d, status: r.status });
       setPhoto(null);
       if (file.current) file.current.value = '';
     } catch (e) {
       // Связь могла оборваться, пока сервер пересылал чек админам: он дойдёт, а статус обновится сам
-      toast(isNetwork(e) ? 'Связь оборвалась, чек мог уже уйти. Подождите минуту: статус обновится сам' : (e as Error).message, true);
+      toast(isNetwork(e) ? 'Связь оборвалась, чек мог дойти. Подождите минуту' : (e as Error).message, true);
     } finally {
       // И после ошибки: админ мог уже решить по заказу, а ответ мог потеряться после того, как чек дошёл
       reload();
@@ -82,9 +82,9 @@ export function Order({ id }: { id: number }) {
         <b>{rub(o.amount)}</b>
       </div>
 
-      {o.status === 'DELIVERED' && o.deliveredText && (
+      {(o.status === 'DELIVERED' || o.status === 'PAID') && o.deliveredText && (
         <div className="card pad col">
-          <div className="cap">Выдано</div>
+          <div className="cap">{o.status === 'DELIVERED' ? 'Выдано' : 'Выдано · заказ ещё в работе'}</div>
           <div className="row" style={{ background: '#0c0c0e', borderRadius: 14, padding: '8px 8px 8px 14px' }}>
             <span className="sp mono" style={{ fontSize: 15, wordBreak: 'break-all' }}>{o.deliveredText}</span>
             <button className="btn icon sm" onClick={() => copyText(o.deliveredText!)} aria-label="Копировать"><Icon name="copy" size={18} /></button>
@@ -110,7 +110,7 @@ export function Order({ id }: { id: number }) {
 
       {o.status === 'PENDING_PAYMENT' && o.payUrl && (
         <div className="card pad col">
-          <div className="muted">Счёт {o.payAmount} ждёт оплаты. После оплаты статус обновится сам.</div>
+          <div className="muted">Счёт на {o.payAmount}. После оплаты статус обновится сам</div>
           <button className="btn block" onClick={() => openPay(o.payUrl!)}>Перейти к оплате</button>
           <button className="btn ghost block sm" disabled={!!busy} onClick={cancel}>{busy === 'cancel' ? 'Отменяем…' : 'Отменить заказ'}</button>
         </div>
@@ -118,7 +118,7 @@ export function Order({ id }: { id: number }) {
 
       {o.manual && o.status === 'REJECTED' && (
         <div className="row" style={{ background: 'rgba(255,90,90,.1)', borderRadius: 14, padding: 12, color: 'var(--bad)', fontSize: 14, lineHeight: 1.45 }}>
-          Оплата отклонена, причина в чате ниже. Если вы точно перевели деньги, напишите туда, разберёмся.
+          Причина отказа в чате ниже. Если вы перевели деньги, напишите туда
         </div>
       )}
 
@@ -135,11 +135,11 @@ export function Order({ id }: { id: number }) {
               <Icon name="copy" size={18} />
             </button>
           ))}
-          <div className="muted small">Комментарий к переводу: <b style={{ color: 'var(--t)' }}>{o.manual.comment}</b>. Если банк не даёт указать комментарий, просто приложите чек.</div>
+          <div className="muted small">Комментарий к переводу: <b style={{ color: 'var(--t)' }}>{o.manual.comment}</b> (если банк позволяет)</div>
 
           {o.status === 'AWAITING_CONFIRMATION' ? (
             <div className="row" style={{ background: 'rgba(255,181,71,.1)', borderRadius: 14, padding: 12, color: 'var(--warn)', fontSize: 14 }}>
-              <Icon name="clock" size={20} />Чек у админа на проверке. Ответ придёт сюда и в бот.
+              <Icon name="clock" size={20} />Чек на проверке. Ответ придёт сюда и в бот
             </div>
           ) : (
             <>
@@ -169,7 +169,7 @@ export function Order({ id }: { id: number }) {
             // Ответ мог потеряться, когда сообщение уже сохранено: прежде чем предлагать повтор, смотрим, дошло ли оно
             const fresh = await api<OrderView>(`/api/orders/${id}`).catch(() => null);
             if (fresh) setData(fresh);
-            if (!fresh) throw new Error('Связь оборвалась. Если сообщение появится в чате, второй раз его не отправляйте');
+            if (!fresh) throw new Error('Связь оборвалась, сообщение могло дойти. Подождите минуту');
             if (!arrived(fresh.messages, known, text, false)) throw new Error('Связь оборвалась, сообщение не дошло. Отправьте ещё раз');
           } finally {
             // Обновление, ушедшее до сообщения, могло вернуться позже и стереть его с экрана: новый запрос отменяет

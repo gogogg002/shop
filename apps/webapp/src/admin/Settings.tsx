@@ -54,7 +54,7 @@ export function Settings() {
           </div>
         ))}
       </div>
-      <p className="muted small">CryptoBot, xRocket и Lolz заработают, когда на сервере прописаны их токены. Гривны и СБП появятся у клиента, когда ниже заполнены реквизиты.</p>
+      <p className="muted small">Для CryptoBot, xRocket и Lolz нужны токены на сервере, для гривен и СБП — реквизиты ниже.</p>
 
       <div className="cap">Гривны: куда переводить</div>
       <label className="field"><span>Номер карты</span><input className="mono" value={s.uah.card} onChange={(e) => setS({ ...s, uah: { ...s.uah, card: e.target.value } })} placeholder="4441 1111 2222 3333" /></label>
@@ -62,9 +62,9 @@ export function Settings() {
         <label className="field sp"><span>Получатель</span><input value={s.uah.holder} onChange={(e) => setS({ ...s, uah: { ...s.uah, holder: e.target.value } })} /></label>
         <label className="field sp"><span>Банк</span><input value={s.uah.bank} onChange={(e) => setS({ ...s, uah: { ...s.uah, bank: e.target.value } })} placeholder="monobank" /></label>
       </div>
-      <label className="field"><span>Курс: сколько ₽ стоит 1 грн</span><input inputMode="decimal" value={s.uah.rate} onChange={(e) => setS({ ...s, uah: { ...s.uah, rate: num(e.target.value) } })} /></label>
+      <label className="field"><span>Курс, ₽ за 1 грн</span><input inputMode="decimal" value={s.uah.rate} onChange={(e) => setS({ ...s, uah: { ...s.uah, rate: num(e.target.value) } })} /></label>
 
-      <div className="cap">СБП вручную (пока нет агрегатора)</div>
+      <div className="cap">СБП вручную</div>
       <label className="field"><span>Телефон</span><input value={s.sbp.phone} onChange={(e) => setS({ ...s, sbp: { ...s.sbp, phone: e.target.value } })} placeholder="+7 900 000-00-00" /></label>
       <div className="row" style={{ gap: 8 }}>
         <label className="field sp"><span>Получатель</span><input value={s.sbp.holder} onChange={(e) => setS({ ...s, sbp: { ...s.sbp, holder: e.target.value } })} /></label>

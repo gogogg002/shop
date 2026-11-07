@@ -200,8 +200,6 @@ b, strong { font-weight: 650; }
 .wh-l span { font-size: 13px; color: var(--m); }
 .wh-r { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 500; color: var(--a); white-space: nowrap; }
 .price-xl { font: 700 38px/1 var(--display); letter-spacing: -0.05em; }
-.eta { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px 0 9px; border-radius: 999px; flex: none;
-  background: var(--lime-tint); border: 1px solid rgba(198,249,78,.24); color: var(--a); font-size: 13.5px; font-weight: 600; }
 .trust-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
 .trust-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.25; color: var(--m); }
 .trust-list svg { color: var(--a); flex: none; }
@@ -243,3 +241,10 @@ b, strong { font-weight: 650; }
   font-size: 13.5px; font-weight: 500; color: var(--m); background: var(--s2); border: 1px solid var(--line); }
 .tag.on { color: var(--a); border-color: rgba(198,249,78,.42); background: var(--lime-tint); }
 .order-line { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px; border-radius: 18px; }
+
+/* «Как это работает»: описание товара короткими шагами */
+.how { display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
+.steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14.5px; line-height: 1.35; }
+.steps .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; margin-top: -1px;
+  font: 700 12px var(--mono); color: var(--a); border: 1px solid color-mix(in srgb, var(--a) 45%, transparent); }

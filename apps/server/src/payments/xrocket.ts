@@ -63,4 +63,23 @@ export const xrocket: AutoProvider = {
     const orderId = Number(inv.payload);
     return Number.isInteger(orderId) ? orderId : null;
   },
+
+  async paidInvoices(ids) {
+    const paid = new Set<string>();
+    let failed = 0;
+    let lastError: unknown;
+    for (const id of ids) {
+      // Один счёт, на который API ответил ошибкой, не должен останавливать сверку остальных
+      try {
+        const inv = await call<TgInvoice>(`/tg-invoices/${encodeURIComponent(id)}`, { method: 'GET' });
+        if (inv.status === 'paid') paid.add(id);
+      } catch (e) {
+        failed++;
+        lastError = e;
+      }
+    }
+    // Не ответил ни один: это сбой связи или ключа, сверка запишет ошибку в лог
+    if (failed && failed === ids.length) throw lastError;
+    return paid;
+  },
 };

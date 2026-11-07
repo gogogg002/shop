@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, apiBlobUrl, copy, isNetwork, itemTitle, methodLabel, prettyPhone, rub, statusLabel, type AdminOrder as AO } from '../api';
+import { api, apiBlobUrl, copy, isNetwork, itemTitle, variantText, methodLabel, orderStatus, prettyPhone, rub, type AdminOrder as AO } from '../api';
 import { Key, Stale, useLoad, useToast } from '../ui/kit';
 import { arrived, Chat } from '../ui/Chat';
 
@@ -36,7 +36,7 @@ export function AdminOrder({ id }: { id: number }) {
     }
   }
 
-  const st = statusLabel[o.status];
+  const st = orderStatus(o);
   const buyer = o.user.username ? `@${o.user.username}` : o.user.firstName ?? o.user.tgId;
 
   return (
@@ -48,7 +48,7 @@ export function AdminOrder({ id }: { id: number }) {
       <div className="card pad col">
         <div className="row">
           <Key icon={o.variant.product.icon} glass={o.variant.product.glass} size={50} />
-          <div className="sp"><div style={{ fontWeight: 600, fontSize: 16 }}>{itemTitle(o.variant.product.title, o.variant.product.access, o.variant.title)}</div><div className="muted small">{methodLabel[o.method].title}{o.payAmount ? ` · ${o.payAmount}` : ''}</div></div>
+          <div className="sp"><div style={{ fontWeight: 600, fontSize: 16 }}>{itemTitle(o.variant.product.title, o.variant.product.access, variantText(o.variant, o.quantity))}</div><div className="muted small">{methodLabel[o.method].title}{o.payAmount ? ` · ${o.payAmount}` : ''}</div></div>
           <b>{rub(o.amount)}</b>
         </div>
         <div className="sep" />
@@ -77,8 +77,17 @@ export function AdminOrder({ id }: { id: number }) {
       {o.status === 'PAID' && (
         <div className="card pad col">
           <div className="cap">Выдача</div>
-          <label className="field"><span>Что передать клиенту (необязательно)</span><textarea rows={2} value={deliverText} onChange={(e) => setDeliverText(e.target.value)} placeholder="Подарок отправлен на @username" /></label>
-          <button className="btn block" disabled={busy} onClick={() => act('deliver', { text: deliverText || undefined }, 'Заказ выдан')}>Выдано</button>
+          {o.deliveredText && (
+            <div className="muted small" style={{ lineHeight: 1.45 }}>
+              Уже выдано: <b className="mono" style={{ color: 'var(--t)', wordBreak: 'break-all' }}>{o.deliveredText}</b>
+            </div>
+          )}
+          <label className="field"><span>Что выдать клиенту: карта, код, ссылка</span><textarea rows={2} value={deliverText} onChange={(e) => setDeliverText(e.target.value)} placeholder="Карта 4441 1111 2222 3333, до 12/28" /></label>
+          <button className="btn ghost block" disabled={busy || !deliverText.trim()} onClick={() => act('issue', { text: deliverText }, 'Выдано, заказ в работе')}>
+            {o.deliveredText ? 'Выдать заново, не завершая' : 'Выдать, не завершая'}
+          </button>
+          <button className="btn block" disabled={busy} onClick={() => act('deliver', { text: deliverText.trim() || undefined }, 'Заказ завершён')}>Завершить заказ</button>
+          <div className="muted small" style={{ lineHeight: 1.45 }}>После завершения клиенту придёт просьба об отзыве.</div>
         </div>
       )}
 
@@ -98,7 +107,7 @@ export function AdminOrder({ id }: { id: number }) {
             // Прежде чем предлагать повтор, смотрим, дошло ли оно
             const fresh = await api<AO>(`/api/admin/orders/${id}`).catch(() => null);
             if (fresh) setData(fresh);
-            if (!fresh) throw new Error('Связь оборвалась. Если сообщение появится в чате, второй раз его не отправляйте');
+            if (!fresh) throw new Error('Связь оборвалась, сообщение могло дойти. Подождите минуту');
             if (!arrived(fresh.messages, known, text, true)) throw new Error('Связь оборвалась, сообщение не дошло. Отправьте ещё раз');
           } finally {
             // Обновление, ушедшее до сообщения, могло вернуться позже и стереть его: новый запрос отменяет старый

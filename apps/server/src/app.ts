@@ -30,7 +30,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) {
       const code = (err as { code?: string }).code ?? 'bad_request';
-      const message = code === 'FST_REQ_FILE_TOO_LARGE' ? 'Фото больше 8 МБ. Пришлите скриншот или сожмите фото'
+      const message = code === 'FST_REQ_FILE_TOO_LARGE' ? 'Фото больше 8 МБ. Пришлите скриншот'
         : status === 413 ? 'Слишком большой запрос' : 'Проверьте запрос';
       return reply.code(status).send({ error: code, message });
     }

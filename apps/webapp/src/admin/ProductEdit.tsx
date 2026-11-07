@@ -5,7 +5,11 @@ import { go } from '../App';
 import type { AdminProduct } from './Products';
 
 type Draft = Omit<AdminProduct, 'id' | 'sales30d' | 'category' | 'variants'>;
-type VariantDraft = { id?: number; title: string; price: string; oldPrice: string; cost: string; isActive: boolean; codesLeft?: number };
+type VariantDraft = {
+  id?: number; title: string; price: string; oldPrice: string; cost: string; isActive: boolean; codesLeft?: number;
+  /** своё количество (звёзды, рубли Steam): цена и закупка за единицу, пределы — сколько можно заказать */
+  perUnit?: boolean; unit?: string; minQty?: string; maxQty?: string;
+};
 
 const toRub = (kop: number | null) => (kop == null ? '' : String(kop / 100));
 const toKop = (s: string) => Math.round(Number(s.replace(',', '.').replace(/\s/g, '')) * 100);
@@ -32,7 +36,10 @@ export function ProductEdit({ id }: { id: number | null }) {
     if (found) {
       const { id: _i, sales30d: _s, category: _c, variants, ...rest } = found;
       setP(rest);
-      setVars(variants.map((v) => ({ id: v.id, title: v.title, price: toRub(v.price), oldPrice: toRub(v.oldPrice), cost: toRub(v.cost), isActive: v.isActive, codesLeft: v.codesLeft })));
+      setVars(variants.map((v) => ({
+        id: v.id, title: v.title, price: toRub(v.price), oldPrice: toRub(v.oldPrice), cost: toRub(v.cost), isActive: v.isActive, codesLeft: v.codesLeft,
+        perUnit: v.perUnit, unit: v.unit, minQty: String(v.minQty), maxQty: String(v.maxQty),
+      })));
     } else {
       setP({
         categoryId: cats.data[0]?.id ?? 0, title: '', subtitle: '', description: '', icon: 'star', glass: 'RED', deliveryType: 'MANUAL',
@@ -61,13 +68,20 @@ export function ProductEdit({ id }: { id: number | null }) {
     if (!p!.categoryId) return toast('Выберите или создайте категорию', true);
     const bad = vars.find((v) => !v.title.trim() || !(toKop(v.price) > 0));
     if (bad) return toast('У каждого варианта нужны название и цена', true);
+    const qtyInt = (s?: string) => (/^\d+$/.test((s ?? '').replace(/\s/g, '')) ? Number((s ?? '').replace(/\s/g, '')) : 0);
+    const badQty = vars.find((v) => v.perUnit && !(qtyInt(v.minQty) >= 1 && qtyInt(v.maxQty) >= qtyInt(v.minQty) && qtyInt(v.maxQty) <= 1_000_000));
+    if (badQty) return toast('Пределы количества: от 1 до 1 000 000, «до» не меньше «от»', true);
     setBusy(true);
     try {
       const saved = id
         ? await api<{ id: number }>(`/api/admin/products/${id}`, { method: 'PATCH', body: p })
         : await api<{ id: number }>('/api/admin/products', { body: p });
       for (const [i, v] of vars.entries()) {
-        const body = { title: v.title.trim(), price: toKop(v.price), oldPrice: v.oldPrice ? toKop(v.oldPrice) : null, cost: v.cost ? toKop(v.cost) : 0, isActive: v.isActive, sort: i };
+        const body = {
+          title: v.title.trim(), price: toKop(v.price), cost: v.cost ? toKop(v.cost) : 0, isActive: v.isActive, sort: i,
+          // у своего количества старой цены в редакторе нет: не трогаем её, а не стираем
+          ...(v.perUnit ? { minQty: qtyInt(v.minQty), maxQty: qtyInt(v.maxQty) } : { oldPrice: v.oldPrice ? toKop(v.oldPrice) : null }),
+        };
         if (v.id) await api(`/api/admin/variants/${v.id}`, { method: 'PATCH', body });
         else await api(`/api/admin/products/${saved.id}/variants`, { body });
       }
@@ -133,7 +147,7 @@ export function ProductEdit({ id }: { id: number | null }) {
 
       <label className="field"><span>Название</span><input value={p.title} onChange={(e) => set('title', e.target.value)} placeholder="Telegram Premium" /></label>
       <label className="field"><span>Подпись в каталоге</span><input value={p.subtitle} onChange={(e) => set('subtitle', e.target.value)} placeholder="Подарком на аккаунт" /></label>
-      <label className="field"><span>Описание</span><textarea rows={3} value={p.description} onChange={(e) => set('description', e.target.value)} /></label>
+      <label className="field"><span>Как это работает: по шагу в строке</span><textarea rows={3} value={p.description} onChange={(e) => set('description', e.target.value)} /></label>
 
       <div className="row" style={{ gap: 8 }}>
         <label className="field sp"><span>Категория</span>
@@ -152,17 +166,17 @@ export function ProductEdit({ id }: { id: number | null }) {
 
       <div className="cap">Вход в аккаунт покупателя</div>
       <div className="seg">
-        {([['UNSPECIFIED', 'Не указано'], ['NO_LOGIN', 'Без входа'], ['WITH_LOGIN', 'Со входом']] as const).map(([k, t]) => (
+        {([['UNSPECIFIED', 'Не указано'], ['NO_LOGIN', 'Без входа'], ['WITH_LOGIN', 'Со входом'], ['GIFT', 'Подарком']] as const).map(([k, t]) => (
           <button key={k} className={p.access === k ? 'on' : ''} onClick={() => setP({
             ...p, access: k,
             // со входом удобнее спрашивать номер телефона, без входа — @username
             ...(k === 'WITH_LOGIN' && p.needsRecipient ? { recipientKind: 'PHONE' as const } : {}),
-            ...(k === 'NO_LOGIN' && p.needsRecipient ? { recipientKind: 'USERNAME' as const } : {}),
+            ...(k === 'GIFT' ? { needsRecipient: true, recipientKind: 'USERNAME' as const } : {}),
           })}>{t}</button>
         ))}
       </div>
       <p className="muted small" style={{ lineHeight: 1.45 }}>
-        Два товара с одинаковым названием в одной категории, один «Без входа», другой «Со входом», покупатель видит одной карточкой с двумя вкладками.
+        Одинаковое название в одной категории и разный режим — на витрине одна карточка с вкладками.
       </p>
 
       <div className="cap">Что спросить у покупателя</div>
@@ -170,6 +184,7 @@ export function ProductEdit({ id }: { id: number | null }) {
         <button className={!p.needsRecipient ? 'on' : ''} onClick={() => set('needsRecipient', false)}>Ничего</button>
         <button className={p.needsRecipient && p.recipientKind === 'USERNAME' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'USERNAME' })}>@username</button>
         <button className={p.needsRecipient && p.recipientKind === 'PHONE' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'PHONE' })}>Телефон</button>
+        <button className={p.needsRecipient && p.recipientKind === 'STEAM' ? 'on' : ''} onClick={() => setP({ ...p, needsRecipient: true, recipientKind: 'STEAM' })}>Логин Steam</button>
       </div>
 
       <div className="between"><span className="cap">Цены, ₽</span>
@@ -186,11 +201,25 @@ export function ProductEdit({ id }: { id: number | null }) {
                 <Toggle on={v.isActive} onChange={(x) => setVar(i, { isActive: x })} label="Вариант активен" />
                 <button className="btn ghost icon sm" onClick={() => remove(i)} aria-label="Удалить вариант"><Icon name="trash" size={18} /></button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <label className="field" style={{ padding: '6px 12px' }}><span>Цена</span><input inputMode="decimal" value={v.price} onChange={(e) => setVar(i, { price: e.target.value })} /></label>
-                <label className="field" style={{ padding: '6px 12px' }}><span>Закупка</span><input inputMode="decimal" value={v.cost} onChange={(e) => setVar(i, { cost: e.target.value })} /></label>
-                <label className="field" style={{ padding: '6px 12px' }}><span>Старая цена</span><input inputMode="decimal" value={v.oldPrice} onChange={(e) => setVar(i, { oldPrice: e.target.value })} /></label>
-              </div>
+              {v.perUnit ? (
+                <>
+                  <div className="muted small" style={{ lineHeight: 1.45 }}>
+                    Покупатель сам вводит количество{v.unit ? ` (${v.unit})` : ''}.
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <label className="field" style={{ padding: '6px 12px' }}><span>Цена за 1</span><input inputMode="decimal" value={v.price} onChange={(e) => setVar(i, { price: e.target.value })} /></label>
+                    <label className="field" style={{ padding: '6px 12px' }}><span>Закупка за 1</span><input inputMode="decimal" value={v.cost} onChange={(e) => setVar(i, { cost: e.target.value })} /></label>
+                    <label className="field" style={{ padding: '6px 12px' }}><span>Можно от</span><input inputMode="numeric" value={v.minQty ?? ''} onChange={(e) => setVar(i, { minQty: e.target.value })} /></label>
+                    <label className="field" style={{ padding: '6px 12px' }}><span>до</span><input inputMode="numeric" value={v.maxQty ?? ''} onChange={(e) => setVar(i, { maxQty: e.target.value })} /></label>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  <label className="field" style={{ padding: '6px 12px' }}><span>Цена</span><input inputMode="decimal" value={v.price} onChange={(e) => setVar(i, { price: e.target.value })} /></label>
+                  <label className="field" style={{ padding: '6px 12px' }}><span>Закупка</span><input inputMode="decimal" value={v.cost} onChange={(e) => setVar(i, { cost: e.target.value })} /></label>
+                  <label className="field" style={{ padding: '6px 12px' }}><span>Старая цена</span><input inputMode="decimal" value={v.oldPrice} onChange={(e) => setVar(i, { oldPrice: e.target.value })} /></label>
+                </div>
+              )}
               {price > 0 && (
                 <div className="row" style={{ gap: 10 }}>
                   <div className="sp" style={{ height: 5, borderRadius: 3, background: 'var(--s3)', overflow: 'hidden' }}>
@@ -199,13 +228,14 @@ export function ProductEdit({ id }: { id: number | null }) {
                   <span className="small" style={{ color: margin >= 20 ? 'var(--ok)' : margin > 0 ? 'var(--warn)' : 'var(--bad)', fontWeight: 600 }}>маржа {margin}%</span>
                 </div>
               )}
-              {p.deliveryType === 'CODES' && v.id && (
+              {p.deliveryType === 'CODES' && v.perUnit && <div className="muted small">Коды не используются: выдача вручную.</div>}
+              {p.deliveryType === 'CODES' && v.id && !v.perUnit && (
                 <label className="field" style={{ padding: '6px 12px' }}>
                   <span>Добавить коды, по одному в строке · сейчас в наличии {v.codesLeft ?? 0}</span>
                   <textarea rows={2} className="mono" value={codes[v.id] ?? ''} onChange={(e) => setCodes({ ...codes, [v.id!]: e.target.value })} />
                 </label>
               )}
-              {p.deliveryType === 'CODES' && !v.id && <div className="muted small">Коды можно загрузить после сохранения.</div>}
+              {p.deliveryType === 'CODES' && !v.id && !v.perUnit && <div className="muted small">Коды можно загрузить после сохранения.</div>}
             </div>
           );
         })}

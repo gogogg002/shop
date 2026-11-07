@@ -2,7 +2,7 @@ import { Prisma, type AccessMode } from '@prisma/client';
 import { prisma } from '../db.js';
 import { ShopError } from './orders.js';
 import { notifier, type ReviewNotice } from './notify.js';
-import { cleanText } from './labels.js';
+import { cleanText, variantLabel } from './labels.js';
 
 export const REVIEW_TEXT_MAX = 1000;
 
@@ -37,7 +37,7 @@ export async function submitReview(orderId: number, userId: number, input: { rat
   if (order.status !== 'DELIVERED') throw new ShopError('bad_state', 'Отзыв можно оставить, когда заказ выполнен');
 
   const notice = {
-    orderId, product: order.variant.product.title, variant: order.variant.title, access: order.variant.product.access,
+    orderId, product: order.variant.product.title, variant: variantLabel(order.variant, order.quantity), access: order.variant.product.access,
     author: [order.user.firstName, order.user.username ? `@${order.user.username}` : null].filter(Boolean).join(' ') || String(order.user.tgId),
   };
 
@@ -74,7 +74,7 @@ export async function submitReview(orderId: number, userId: number, input: { rat
     if (fresh.editCount >= reviewPolicy.maxEdits)
       throw new ShopError('edit_limit', `Отзыв можно изменить не больше ${reviewPolicy.maxEdits} раз`);
     const wait = Math.max(1, Math.ceil((fresh.activityAt.getTime() + reviewPolicy.editCooldownMs - now.getTime()) / 1000));
-    throw new ShopError('too_fast', `Отзыв только что сохранён. Изменить его можно через ${wait} сек.`, 429);
+    throw new ShopError('too_fast', `Изменить отзыв можно через ${wait} сек.`, 429);
   }
 
   const review = await prisma.review.findUniqueOrThrow({ where: { orderId } });
@@ -131,14 +131,14 @@ export async function ratingSummary(where: Prisma.ReviewWhereInput = {}) {
 const publicInclude = {
   user: { select: { firstName: true } },
   product: { select: { title: true, access: true } },
-  order: { select: { variant: { select: { title: true } } } },
+  order: { select: { quantity: true, variant: { select: { title: true, perUnit: true, unit: true } } } },
 } satisfies Prisma.ReviewInclude;
 
 type PublicRow = Prisma.ReviewGetPayload<{ include: typeof publicInclude }>;
 
 const toPublic = (r: PublicRow) => ({
   id: r.id, rating: r.rating, text: r.text, author: authorName(r.user),
-  product: r.product.title, access: r.product.access, variant: r.order.variant.title, createdAt: r.createdAt,
+  product: r.product.title, access: r.product.access, variant: variantLabel(r.order.variant, r.order.quantity), createdAt: r.createdAt,
 });
 
 export async function listReviews(opts: { productIds?: number[]; limit: number; before?: number }) {
